@@ -100,13 +100,28 @@ public:
 
 			else if (pos.y < 0.4f && pos.y > -0.4f) {
 				if (pos.x < 0.4f && pos.x > -0.4f) {
-					rotate(90); moveVec.x = -moveVec.x;
+					if (pos.x > 0.39f) {
+						moveVec.x = abs(moveVec.x);
+						rotate(90);
+
+					}
+					else if (pos.x < -0.39f) {
+						moveVec.x = -abs(moveVec.x);
+						rotate(90);
+
+					}
+					else if (pos.y > 0.39f) {
+						moveVec.y = abs(moveVec.y);
+						rotate(90);
+
+					}
+					else if (pos.y < -0.39f){
+						moveVec.y = -abs(moveVec.y);
+						rotate(90);
+
+				}
 				}
 			}
-			else if (pos.x < 0.4f && pos.x > -0.4f)
-				if (pos.y < 0.4f && pos.y > -0.4f) {
-					rotate(90); moveVec.y = -moveVec.y;
-				}
 		}
 		
 	}
@@ -129,7 +144,7 @@ Obj rect;
 bool isTimerEnd = false;
 
 void init() {
-
+	srand(104);
 	for (size_t i = 0; i < 6; i++)
 	{
 		rect.vertexList.push_back(t_vertex_rect[i]);

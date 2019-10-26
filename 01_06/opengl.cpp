@@ -32,7 +32,7 @@ public:
 	glm::vec3 pos;
 	glm::vec3 moveVec;
 	float rotz;
-	float speed = 3;
+	float speed = 0.03;
 
 	glm::mat4 trans = glm::mat4(1.0f);
 
@@ -71,7 +71,7 @@ public:
 
 	virtual void tick(float dt) {
 		bIsGetTransInThisTick = false;
-		pos += moveVec * dt;
+		pos += moveVec;
 
 		if (pos.x < -0.9f || pos.x > 0.9f) { rotate(90); moveVec.x = -moveVec.x; }
 		if (pos.y < -0.9f || pos.y > 0.9f) { rotate(90); moveVec.y = -moveVec.y; }

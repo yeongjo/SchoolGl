@@ -103,6 +103,10 @@ public:
 	vec3 color = vec3(0,1,0);
 
 	float speed = 60;
+	float sspeed = 0;
+	float rotrot = 0;
+
+	bool effectOnlyZ = false;
 
 	// call after this have verteies
 	void init(const char *path) {
@@ -121,11 +125,13 @@ public:
 	glm::mat4& getTrans() {
 		if (bIsGetTransInThisTick) return trans;
 		trans = glm::mat4(1.0f);
+		trans = glm::rotate(trans, glm::radians(rotrot), glm::vec3(0.0, 1, 0));
 		trans = glm::translate(trans, pos);
 		trans = glm::scale(trans, scale);
-		trans = glm::rotate(trans, glm::radians(rot.z), glm::vec3(0.0, 0.0, 1.0));
-		trans = glm::rotate(trans, glm::radians(rot.x), glm::vec3(1, 0.0, 0));
+		if(!effectOnlyZ)
 		trans = glm::rotate(trans, glm::radians(rot.y), glm::vec3(0.0, 1, 0));
+		else trans = glm::rotate(trans, glm::radians(rot.y), glm::vec3(0.0, 0.0, 1.0));
+		trans = glm::rotate(trans, glm::radians(rot.x), glm::vec3(1, 0.0, 0));
 		bIsGetTransInThisTick = true;
 		return trans;
 	}
@@ -133,6 +139,7 @@ public:
 	virtual void tick(float dt) {
 		bIsGetTransInThisTick = false;
 		rot.y += dt * speed;
+		rotrot += dt * sspeed;
 	}
 
 	void setColor(GLuint tri_shader) {
@@ -152,11 +159,12 @@ private:
 Window win;
 Camera cam;
 GLuint tri_shader, grid_shader;
-Obj objs[4];
-Obj rect;
+Obj obj;
 Obj tri;
 
 VO gridVO;
+
+GLUquadricObj* qobj;
 
 bool isTimerEnd = false;
 
@@ -170,12 +178,9 @@ void init() {
 	//rect.init();
 	//rect.color = vec3(1, 1, 1);
 	//rect.scale = vec3(3);
-	objs[0].init("../model/cube.obj");
-	objs[1].init("../model/tri.obj");
 
-	for (size_t i = 0; i < 2; i++) {
-		objs[i].rot.x = -30;
-	}
+	qobj = gluNewQuadric(); // 객체 생성하기
+	gluQuadricDrawStyle(qobj, GLU_LINE); // 도형 스타일
 
 	gridVO.drawSytle = GL_LINES;
 	gridVO.vertex.push_back(vec3(0, 1, 0));
@@ -208,7 +213,7 @@ void loop() {
 
 	cam.tick(dt);
 	for (size_t i = 0; i < 2; i++) {
-		objs[i].tick(dt);
+		obj.tick(dt);
 	}
 
 	glutPostRedisplay();
@@ -227,6 +232,7 @@ GLvoid Reshape(int w, int h);
 void Keyboard(unsigned char key, int x, int y);
 void Mouse(int button, int state, int x, int y);
 void specialInput(int key, int x, int y);
+void keyboardUp(unsigned char key, int x, int y);
 
 void main(int argc, char** argv) // 윈도우 출력하고 콜백함수 설정 
 { //--- 윈도우 생성하기
@@ -256,6 +262,7 @@ void main(int argc, char** argv) // 윈도우 출력하고 콜백함수 설정
 	glutReshapeFunc(Reshape); // 다시 그리기 함수 지정
 
 	glutKeyboardFunc(Keyboard);
+	glutKeyboardUpFunc(keyboardUp);
 	glutMouseFunc(Mouse);
 	glutSpecialFunc(specialInput);
 
@@ -276,12 +283,24 @@ GLvoid drawScene() // 콜백 함수: 출력
 	unsigned int vpLoc = glGetUniformLocation(tri_shader, "vp");
 	glUniformMatrix4fv(vpLoc, 1, GL_FALSE, glm::value_ptr(cam.getTrans(&win)));
 	unsigned int transformLoc = glGetUniformLocation(tri_shader, "trans");
-	glUniformMatrix4fv(transformLoc, 1, GL_FALSE, glm::value_ptr(objs[0].getTrans()));
-	vec4 a = cam.getTrans(&win)* objs[0].getTrans() * vec4(objs[0].pos, 1);
-	//rect.setColor(tri_shader);
-	//rect.render();
-	objs[renderIdx].setColor(tri_shader);
-	objs[renderIdx].render();
+	glUniformMatrix4fv(transformLoc, 1, GL_FALSE, glm::value_ptr(obj.getTrans()));
+	switch (renderIdx) {
+	case 0:
+		gluSphere(qobj, 1.5, 50, 50); // 객체 만들기
+		break;
+	case 1:
+		gluCylinder(qobj, 1.0, 0.0, 2.0, 20, 8); // 객체 만들기
+		break;
+	case 2:
+		gluCylinder(qobj, 1.0, 0.0, 2.0, 20, 8);
+		break;
+	case 3:
+		gluCylinder(qobj, 1.0, 1.0, 2.0, 20, 8);
+		break;
+	case 4:
+		gluDisk(qobj, 0.5, 2.0, 20, 3);
+		break;
+	}
 
 	glUseProgram(grid_shader);
 	gridVO.render();
@@ -299,52 +318,88 @@ bool isCullAble = true;
 bool isLineAble = false;
 void Keyboard(unsigned char key, int x, int y)
 {
-	printf("Keyboard: %c [%d, %d]\n", key, x, y);
+	printf("Keyboard down: %c [%d, %d]\n", key, x, y);
+	
 	switch (key) {
-	case 'c':
-		renderIdx = 0;
+	case '1':
+		obj.effectOnlyZ = false;
+		obj.rot.z = 0;
+		obj.rot.x = 0; renderIdx = 0;
 		break;
-	case 'p':
+	case '2':
 		renderIdx = 1;
+		obj.rot.z = 0;
+		obj.rot.x = 0;
+		obj.rot.z = 90;
+		obj.effectOnlyZ = true;
 		break;
-	case 'h':
+	case '3':
+		obj.effectOnlyZ = false;
+		renderIdx = 2;
+		obj.rot.z = 0;
+		obj.rot.x = 0;
+		obj.rot.x = -90;
+
+		break;
+	case '4':
+		obj.effectOnlyZ = false;
+		obj.rot.z = 0;
+		obj.rot.x = 0; renderIdx = 3;
+		break;
+	case '5':
+		obj.effectOnlyZ = false;
+		obj.rot.z = 0;
+		obj.rot.x = 0; renderIdx = 4;
+		break;
+	case 'r':
 		isCullAble = !isCullAble;
-		if(isCullAble)
-			glEnable(GL_CULL_FACE);
+		if (isCullAble)
+			obj.sspeed = 30;
 		else
-			glDisable(GL_CULL_FACE);
+			obj.sspeed = -30;
 		break;
 	case 'y':
 	{
-		for (size_t i = 0; i < 2; i++) {
-			objs[i].speed = -objs[i].speed;
-		}
+		obj.speed = -obj.speed;
 	}
 		break;
 	case 'w':
 		isLineAble = !isLineAble;
 		if(isLineAble)
-			glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+			gluQuadricDrawStyle(qobj, GLU_FILL); // 도형 스타일
 		else
-			glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+			gluQuadricDrawStyle(qobj, GLU_LINE); // 도형 스타일
+		break;
+	case 'c':
+		obj.pos = vec3();
+		obj.rot = vec3();
 		break;
 	case 'q': isTimerEnd = true;  glutLeaveMainLoop(); break;
 	}
 }
 
+void keyboardUp(unsigned char key, int x, int y) {
+	printf("Keyboard up: %c [%d, %d]\n", key, x, y);
+
+}
+
 void specialInput(int key, int x, int y) {
+	printf("Keyboard: %c [%d, %d]\n", key, x, y);
 	switch (key) {
 	case GLUT_KEY_UP:
-		//do something here
+		obj.pos.y += 0.1f;
 		break;
 	case GLUT_KEY_DOWN:
-		//do something here
+		obj.pos.y -= 0.1f;
+
 		break;
 	case GLUT_KEY_LEFT:
-		//do something here
+		obj.pos.x -= 0.1f;
+
 		break;
 	case GLUT_KEY_RIGHT:
-		//do something here
+		obj.pos.x += 0.1f;
+
 		break;
 	}
 }
