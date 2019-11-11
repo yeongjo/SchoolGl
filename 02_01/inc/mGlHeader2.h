@@ -14,7 +14,9 @@ using namespace std;
 using namespace glm;
 
 #define print(fmt, ...) printf("[%s:%d:%s]"#fmt"\n",__FILE__,__LINE__,__FUNCTION__,##__VA_ARGS__);
-
+#define debug(fmt, ...) printf("Debug: " fmt "\n", ##__VA_ARGS__);
+#define De2Ra(x) x*0.017453
+#define EPSILON 0.0000001
 
 float rc() {
 	return rand() % 255 / 255.f;
@@ -101,17 +103,19 @@ GLuint complieShader(const char* shader) {
 	return ShaderProgramID;
 }
 
-
+// 사용전에 bind를 반드시 호출해줘야한다.
 class VO {
 public:
-	GLuint VAO, VBO, elementbuffer;
+	GLuint VAO = 0, VBO = 0, elementbuffer = 0;
 	vector<vec3> vertex, color, normal;
 	vector<vec2> uv;
 	vector<uint> vertexIndices;
 
-	GLshort drawSytle = GL_TRIANGLES;
+	GLshort drawStyle = GL_TRIANGLES;
 
 	int verIdx = -1;
+
+	bool isBind = false;
 
 	//GLbyte mode = 0;
 	//static const GLbyte color	= 0b0000'0001;//1
@@ -122,7 +126,15 @@ public:
 		return readObj(path);
 	}
 
+	void remove() {
+		if(VAO)
+			glDeleteVertexArrays(1, &VAO);
+		if(VBO)
+			glDeleteBuffers(1, &VBO);
+	}
+
 	void bind() {
+		remove();
 		glGenVertexArrays(1, &VAO);
 		glGenBuffers(1, &VBO);
 		size_t bufferOff = 0;
@@ -152,9 +164,12 @@ public:
 			glEnableVertexAttribArray(3);
 			bufferOff += uv.size() * 3 * sizeof(float);
 		}
+
+		isBind = true;
 	}
 
 	void render() {
+		assert(isBind && "not binded VO used.");
 		glBindVertexArray(VAO);
 		if (verIdx == -1)
 			verIdx = vertexIndices.size();
@@ -162,7 +177,7 @@ public:
 		if (verIdx >= 3)
 			;// glDrawElements(GL_TRIANGLES, 0, vertex.size());
 		else
-			glDrawArrays(drawSytle, 0, vertex.size());
+			glDrawArrays(drawStyle, 0, vertex.size());
 	}
 };
 
@@ -234,4 +249,43 @@ VO* readObj(const char* file_path) {
 	}
 
 	return vo;
+}
+
+
+float cross(const vec2& a, const vec2& b) {
+	return a.x * b.y - a.y * b.x;
+}
+
+
+// 출처: https://bowbowbow.tistory.com/17 [멍멍멍]
+bool operator<(const vec2& a, const vec2& b) {
+	return a.x < b.x && a.y < b.y;
+}
+
+/*
+- 점 a, b를 지나는 직선과 점 c, d를 지나는 직선의 교점을 x에 반환한다.
+- 두 직선이 평행이면(겹치는 경우 포함) 거짓을, 아니면 참을 반환한다.
+*/
+bool lineIntersection(const vec2& a, const vec2& b, const vec2& c, const vec2& d, vec2& retX) {
+	float det = cross((b - a),(d - c)); //두선이 평행인 경우
+	if(fabs(det) < EPSILON) return false;
+	retX = a+(b-a)*(cross((c-a),(d-c))/det);
+	return true;
+}
+
+// - p가 두 점 a, b를 감싸면서 각 변이 x, y축에 평행한 최소사각형 내부에 있는지 확인한다.
+// a, b, p는 일직선 상에 있다고 가정한다.
+bool inBoundingRectangle(const vec2& p, vec2& a, vec2& b) {
+	vec2 t1(glm::min(a.x, b.x), glm::min(a.y, b.y));
+	vec2 t2(glm::max(a.x, b.x), glm::max(a.y, b.y));
+	return p == t1 || p == t2 || (t1 < p && p < t2);
+}
+
+// - 두 점 a, b를 지나는 선분과 두 점 c, b를 지나는 선분을 p에 반환한다.
+// - 교짐이 여러개일 경우 아무점이나 반환한다.
+bool segmentIntersection(vec2& a, vec2& b, vec2& c, vec2& d, vec2& retP) {
+	//두 직선이 평행인 경우를 우선 예외로 처리한다.
+	if (lineIntersection(a, b, c, d, retP))
+		//p가 두 선분에 포함되어 있는 경우에만 참을 반환한다.
+		return inBoundingRectangle(retP, a, b) && inBoundingRectangle(retP, c, d);
 }

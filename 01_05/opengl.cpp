@@ -73,7 +73,9 @@ public:
 
 	virtual void tick(float dt) {
 		bIsGetTransInThisTick = false;
-		scale += .1f*dt;
+		scale += .5f*dt;
+		if (scale > 1.f)
+			scale = 0.1f;
 	}
 
 	virtual void render() {
@@ -155,7 +157,8 @@ void main(int argc, char** argv) // 윈도우 출력하고 콜백함수 설정
 	glutInitWindowPosition(1920, 0); // 윈도우의 위치 지정
 	glutInitWindowSize(800, 600); // 윈도우의 크기 지정
 	glutCreateWindow("Example1"); // 윈도우 생성(윈도우 이름)
-
+	glPointSize(10);
+	glLineWidth(6);
 		//--- GLEW 초기화하기
 	glewExperimental = GL_TRUE;
 	if (glewInit() != GLEW_OK) {

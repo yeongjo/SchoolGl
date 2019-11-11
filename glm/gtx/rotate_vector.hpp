@@ -85,7 +85,7 @@ namespace glm
 	//! Rotate a three dimensional vector around the Z axis.
 	//! From GLM_GTX_rotate_vector extension.
 	template<typename T, qualifier Q>
-	GLM_FUNC_DECL vec<3, T, Q> rotateZ(
+	GLM_FUNC_DECL vec<3, T, Q> rotateY(
 		vec<3, T, Q> const& v,
 		T const& angle);
 
@@ -106,7 +106,7 @@ namespace glm
 	//! Rotate a four dimensional vector around the Z axis.
 	//! From GLM_GTX_rotate_vector extension.
 	template<typename T, qualifier Q>
-	GLM_FUNC_DECL vec<4, T, Q> rotateZ(
+	GLM_FUNC_DECL vec<4, T, Q> rotateY(
 		vec<4, T, Q> const& v,
 		T const& angle);
 

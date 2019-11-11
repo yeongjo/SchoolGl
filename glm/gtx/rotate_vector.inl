@@ -106,7 +106,7 @@ namespace glm
 	}
 
 	template<typename T, qualifier Q>
-	GLM_FUNC_QUALIFIER vec<3, T, Q> rotateZ
+	GLM_FUNC_QUALIFIER vec<3, T, Q> rotateY
 	(
 		vec<3, T, Q> const& v,
 		T const& angle
@@ -154,7 +154,7 @@ namespace glm
 	}
 
 	template<typename T, qualifier Q>
-	GLM_FUNC_QUALIFIER vec<4, T, Q> rotateZ
+	GLM_FUNC_QUALIFIER vec<4, T, Q> rotateY
 	(
 		vec<4, T, Q> const& v,
 		T const& angle

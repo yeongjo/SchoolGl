@@ -14,7 +14,7 @@ using namespace std;
 using namespace glm;
 
 #define print(fmt, ...) printf("[%s:%d:%s]"#fmt"\n",__FILE__,__LINE__,__FUNCTION__,##__VA_ARGS__);
-
+#define De2Ra(x) x*0.017453
 
 float rc() {
 	return rand() % 255 / 255.f;
@@ -109,7 +109,7 @@ public:
 	vector<vec2> uv;
 	vector<uint> vertexIndices;
 
-	GLshort drawSytle = GL_TRIANGLES;
+	GLshort drawStyle = GL_TRIANGLES;
 
 	int verIdx = -1;
 
@@ -162,7 +162,7 @@ public:
 		if (verIdx >= 3)
 			;// glDrawElements(GL_TRIANGLES, 0, vertex.size());
 		else
-			glDrawArrays(drawSytle, 0, vertex.size());
+			glDrawArrays(drawStyle, 0, vertex.size());
 	}
 };
 

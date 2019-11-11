@@ -14,7 +14,7 @@ using namespace std;
 using namespace glm;
 
 #define print(fmt, ...) printf("[%s:%d:%s]"#fmt"\n",__FILE__,__LINE__,__FUNCTION__,##__VA_ARGS__);
-
+#define De2Ra(x) x*0.017453
 
 float rc() {
 	return rand() % 255 / 255.f;

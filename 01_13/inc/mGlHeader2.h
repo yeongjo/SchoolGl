@@ -13,8 +13,9 @@
 using namespace std;
 using namespace glm;
 
-#define print(fmt, ...) printf("[%s:%d:%s]"#fmt"\n",__FILE__,__LINE__,__FUNCTION__,##__VA_ARGS__);
-
+#define print(fmt, ...) printf("[%s:%d:%s]" fmt "\n",__FILE__,__LINE__,__FUNCTION__,##__VA_ARGS__);
+#define debug(fmt, ...) printf("Debug: " fmt "\n", ##__VA_ARGS__);
+#define De2Ra(x) x*0.017453
 
 float rc() {
 	return rand() % 255 / 255.f;
@@ -72,10 +73,10 @@ GLuint complieShader(const char* shader) {
 	char* t_fs = readTxt(s_fs.str().c_str());
 
 	std::stringstream ss;
-	ss << "ERROR: " << shader << "vertex shader 컴파일 실패 :";
+	ss << "ERROR: " << shader << ": vertex shader 컴파일 실패 :";
 	GLuint vs = compliePartShader(t_vs, GL_VERTEX_SHADER, ss.str().c_str());
 	ss.clear(); ss.str("");
-	ss << "ERROR: " << shader << "fragment shader 컴파일 실패 :";
+	ss << "ERROR: " << shader << ": fragment shader 컴파일 실패 :";
 	GLuint fs = compliePartShader(t_fs, GL_FRAGMENT_SHADER, ss.str().c_str());
 
 	GLuint ShaderProgramID = glCreateProgram(); //--- 세이더 프로그램 만들기
@@ -101,7 +102,7 @@ GLuint complieShader(const char* shader) {
 	return ShaderProgramID;
 }
 
-
+// 사용전에 bind를 반드시 호출해줘야한다.
 class VO {
 public:
 	GLuint VAO, VBO, elementbuffer;
@@ -109,9 +110,11 @@ public:
 	vector<vec2> uv;
 	vector<uint> vertexIndices;
 
-	GLshort drawSytle = GL_TRIANGLES;
+	GLshort drawStyle = GL_TRIANGLES;
 
 	int verIdx = -1;
+
+	bool isBind = false;
 
 	//GLbyte mode = 0;
 	//static const GLbyte color	= 0b0000'0001;//1
@@ -152,9 +155,12 @@ public:
 			glEnableVertexAttribArray(3);
 			bufferOff += uv.size() * 3 * sizeof(float);
 		}
+
+		isBind = true;
 	}
 
 	void render() {
+		assert(isBind && "not binded VO used.");
 		glBindVertexArray(VAO);
 		if (verIdx == -1)
 			verIdx = vertexIndices.size();
@@ -162,7 +168,7 @@ public:
 		if (verIdx >= 3)
 			;// glDrawElements(GL_TRIANGLES, 0, vertex.size());
 		else
-			glDrawArrays(drawSytle, 0, vertex.size());
+			glDrawArrays(drawStyle, 0, vertex.size());
 	}
 };
 
