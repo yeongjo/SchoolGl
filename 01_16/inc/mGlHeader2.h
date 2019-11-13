@@ -13,7 +13,7 @@
 using namespace std;
 using namespace glm;
 
-#define print(fmt, ...) printf("[%s:%d:%s]"#fmt"\n",__FILE__,__LINE__,__FUNCTION__,##__VA_ARGS__);
+#define print(fmt, ...) printf("[%s:%d:%s]" fmt "\n",__FILE__,__LINE__,__FUNCTION__,##__VA_ARGS__);
 #define debug(fmt, ...) printf("Debug: " fmt "\n", ##__VA_ARGS__);
 #define De2Ra(x) x*0.017453
 #define EPSILON 0.0000001
@@ -207,6 +207,7 @@ VO* readObj(const char* file_path) {
 	bool ret = tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, file_path);
 	if (!ret) {
 		print("can't load %s", file_path);
+		assert(ret && file_path);
 	}
 
 	uint shape_size = shapes.size();

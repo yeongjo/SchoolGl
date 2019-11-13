@@ -8,18 +8,45 @@ using namespace glm;
 int render_line_idx = 0;
 
 
-Shader triShader, gridShader;
 
 
-GLclampf f() {
-	return rand() / 255 / 255.0f;
-}
-
-
-class NumberObj : public Obj {
+class CraneObj : public Obj {
 public:
-	void render() {
-		vo->render();
+	vec3 rotSpeed;
+
+	void tick(float dt) {
+		float x = rotSpeed.x*dt;
+		float y = rotSpeed.y*dt;
+		float z = rotSpeed.z*dt;
+
+		Obj::rotateX(x);
+		if (rot.x < -90 || rot.x > 90) rotSpeed.x = -rotSpeed.x;
+
+		Obj::rotateY(y);
+
+		Obj::rotateZ(z);
+		if (rot.z < -90 || rot.z > 90) rotSpeed.z = -rotSpeed.z;
+	}
+
+	void rotateX(float x) {
+		rotSpeed.x = x;
+	}
+	void rotateY(float y) {
+		rotSpeed.y = y;
+		
+	}
+	void rotateZ(float z) {
+		rotSpeed.z = z;
+		
+	}
+
+	void resetRotateSpeed() {
+		rotSpeed = vec3();
+	}
+
+	void resetRotate() {
+		resetRotateSpeed();
+		rot = vec3();
 	}
 };
 
@@ -27,15 +54,14 @@ public:
 Window win;
 Camera cam;
 
-
 VO gridVO;
 
-CameraShaderUniformBuffer camShader;
+CraneObj*craneObj[3];
+
+Shader triShader, gridShader;
+
 
 bool isTimerEnd = false;
-
-NumberObj* numberObjs[10];
-
 
 void init() {
 	glLineWidth(3);
@@ -43,21 +69,24 @@ void init() {
 	triShader.complieShader("tri");
 	gridShader.complieShader("grid");
 
-	for (int i = 0; i < 10; i++) {
-		numberObjs[i] = new NumberObj();
-		stringstream ss;
-		ss << "../model/numbers/" << i << ".obj";
-		numberObjs[i]->loadObj(ss.str().c_str());
-		numberObjs[i]->setShader(&triShader);
-		numberObjs[i]->setPos(vec3(0, 0, 6+-i * 3));
-		//numberObjs[i]->vo->drawStyle = GL_LINE_LOOP;
-	}
-	
-	cam.arm_length = 13;
-	cam.rotateY(30);
+	cam.init();
 
-	camShader.create(cam, win);
-	//camShader.bindBuffer();
+	for (size_t i = 0; i < 3; i++) {
+		craneObj[i] = new CraneObj();
+		stringstream ss;
+		ss << "../model/opengl_0116/body" << (i+1) << ".obj";
+		craneObj[i]->loadObj(ss.str().c_str());
+		craneObj[i]->setShader(&triShader);
+		craneObj[i]->color = vec3(f(), f(), f());
+	}
+	craneObj[1]->setPos(vec3(0, 0.5f, 0));
+	craneObj[2]->setPos(vec3(0, 0.5f,0));
+
+	craneObj[1]->parentObj = craneObj[0];
+	craneObj[2]->parentObj = craneObj[1];
+	
+	cam.armLength = 10;
+	cam.rotateArmY(30);
 
 	gridVO.drawStyle = GL_LINES;
 	gridVO.vertex.push_back(vec3(0, 100, 0));
@@ -75,11 +104,9 @@ bool stop = false;
 DWORD prevTime = 0;
 DWORD thisTickTime = 0;
 float dt;
-float throwRemainTime = 3;
 
 void loop() {
 	if (stop) return;
-
 
 	if (prevTime == 0) {
 		prevTime = GetTickCount64() - 10;
@@ -91,7 +118,7 @@ void loop() {
 
 	cam.tick(dt);
 	Scene::activeScene->tick(dt);
-
+	
 	glutPostRedisplay();
 }
 
@@ -101,32 +128,10 @@ GLvoid drawScene() // 콜백 함수: 출력
 	glClearColor(0, 0, 0, 1.0f); // 바탕색을 ‘blue’로 지정
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // 설정된 색으로 전체를 칠하기
 
-	cam.getTrans(win);
-	camShader.bindBuffer();
-
-	struct tm* nowtime;
-	time_t t;
-	int hour, minute, second;
-
-	time(&t);//현재 시간을 알아옴
-
-	nowtime = localtime(&t);//시간 구조체로 변환
-
-	hour = nowtime->tm_hour;
-	minute = nowtime->tm_min;
-	second = nowtime->tm_sec;
-
-	int numberIdxSelect[] = { hour / 10, hour % 10, minute / 10, minute % 10, second / 10, second % 10 };
-
-	for (size_t i = 0; i < 6; i++) {
-		triShader.changeUniformValue("trans", (void*)&numberObjs[i]->getTrans());
-		triShader.use();
-		int numberIdx = numberIdxSelect[i];
-		numberObjs[numberIdx]->render();
-	}
+	cam.bind(win);
+	Scene::activeScene->render();
 
 	gridShader.use();
-
 	gridVO.render();
 
 	glutSwapBuffers(); // 화면에 출력하기
@@ -155,7 +160,7 @@ void main(int argc, char** argv) // 윈도우 출력하고 콜백함수 설정
 	win.init(800, 600);
 	glutInitWindowPosition(0, 60); // 윈도우의 위치 지정
 	glutInitWindowSize(win.w, win.h); // 윈도우의 크기 지정
-	glutCreateWindow("Example1"); // 윈도우 생성(윈도우 이름)
+	glutCreateWindow(__FILE__); // 윈도우 생성(윈도우 이름)
 
 	glEnable(GL_DEPTH_TEST);
 		//--- GLEW 초기화하기
@@ -199,19 +204,39 @@ void Keyboard(unsigned char key, int x, int y)
 	debug("Keyboard down: %c [x:%d, y:%d]", key, x, y);
 	
 	switch (key) {
-	case 'y':
-		cam.rotateY(-10);
+	case 'b':
+		craneObj[0]->rotateY(40);
 		break;
-	case 'Y':
-		cam.rotateY(10);
+	case 'B':
+		craneObj[0]->rotateY(-40);
+		break;
+	case 'm':
+		craneObj[1]->rotateX(40);
+		break;
+	case 'M':
+		craneObj[1]->rotateX(-40);
+		break;
+	case 't':
+		craneObj[2]->rotateZ(40);
+		break;
+	case 'T':
+		craneObj[2]->rotateZ(-40);
+		break;
+	case 's':
+	{
+		for (size_t i = 0; i < 3; i++) {
+			craneObj[i]->resetRotateSpeed();
+		}
+	}
+		break;
+	case 'c':
+	{
+		for (size_t i = 0; i < 3; i++) {
+			craneObj[i]->resetRotate();
+		}
+	}
+		break;
 
-		break;
-	case 'z':
-		cam.rotateZ(-10);
-		break;
-	case 'Z':
-		cam.rotateZ(10);
-		break;
 	case 'q': isTimerEnd = true;  glutLeaveMainLoop(); break;
 	}
 }
@@ -245,15 +270,22 @@ void specialInput(int key, int x, int y) {
 // button: 0(left), 1(mid), 2(right), 3(scrollup), 4(scrolldown)
 // state: 0(up), 1(down)
 void mouseHandler(int button, int state, int _x, int _y) {
-	float screenMouseX = _x / (800.0f / 2) - 1;
-	float screenMouseY = -_y / (600.0f / 2) + 1;
+	float screenMouseX = _x / (Window::get().halfWidth / 2) - 1;
+	float screenMouseY = -_y / (Window::get().halfHeight / 2) + 1;
 	debug("Mouse: button(%d), state(%d), window(%d,%d), screen(%02f, %02f)", button, state, _x, _y, screenMouseX, screenMouseY);
 
 	switch (state) {
+	//case 0: // Mouse Down
+	//	cuttingObj->controller->startDrag(vec3(screenMouseX, screenMouseY, 0));
+	//	break;
+	//case 1: // Mouse Up
+	//	cuttingObj->controller->endDrag(vec3(screenMouseX, screenMouseY, 0));
+	//	break;
 	}
 }
 
 void mouseMotionHandler(int x, int y) {
-	float screenMouseX = x / (800.0f / 2) - 1;
-	float screenMouseY = -y / (600.0f / 2) + 1;
+	float screenMouseX = x / (Window::get().halfWidth / 2) - 1;
+	float screenMouseY = -y / (Window::get().halfHeight / 2) + 1;
+	//cuttingObj->controller->setMovingMousePos(vec3(screenMouseX, screenMouseY, 0));
 }

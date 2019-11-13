@@ -8,8 +8,9 @@ layout (std140, binding = 0) uniform Camera{
 	mat4 vp; // 192
 };
 
-uniform mat4 trans;
+out vec3 vcolor;
 
 void main(){
-	gl_Position = vp*trans*vec4(pos,1);
+	gl_Position = vp*vec4(pos,1);
+	vcolor = abs(pos);
 }

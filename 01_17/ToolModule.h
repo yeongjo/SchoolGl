@@ -5,18 +5,41 @@
 #include <queue>
 
 
+GLclampf f() {
+	return rand() % 255 / 255.0f;
+}
+
+vec3 randColor() {
+	return vec3(f(), f(), f());
+}
+
+
 
 class Window {
+	static Window* active;
 public:
 	uint w, h;
+	uint halfWidth, halfHeight;
 	float ratio;
+
+	Window() {
+		active = this;
+	}
+
+	static Window& get() {
+		return *active;
+	}
 
 	void init(int w, int h) {
 		this->w = w;
 		this->h = h;
 		ratio = w / (float)h;
+		halfWidth = w / 2, halfHeight = h / 2;
 	}
 };
+
+
+Window* Window::active = nullptr;
 
 
 class TickObj;
@@ -82,6 +105,31 @@ void Scene::render() {
 }
 
 
+class Camera;
+
+class CameraShaderUniformBuffer {
+public:
+	unsigned int UBO;
+	mat4* p, * v, * vp;
+
+	void create() {
+		glGenBuffers(1, &UBO);
+		glBindBuffer(GL_UNIFORM_BUFFER, UBO);
+		glBufferData(GL_UNIFORM_BUFFER, sizeof(mat4) * 3, NULL, GL_STATIC_DRAW); // 152 바이트 메모리 할당
+	}
+
+	void setData(Camera& cam, Window& win);
+
+	// 값변경될때마다 한번만 호출하면되나
+	void bindBuffer() {
+		glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(glm::mat4), p);
+		glBufferSubData(GL_UNIFORM_BUFFER, sizeof(glm::mat4), sizeof(glm::mat4), v);
+		glBufferSubData(GL_UNIFORM_BUFFER, 2 * sizeof(glm::mat4), sizeof(glm::mat4), vp);
+		glBindBufferBase(GL_UNIFORM_BUFFER, 0, UBO);
+	}
+};
+
+
 class Camera {
 public:
 	glm::vec3 pos = glm::vec3(0, 0, -1);
@@ -93,17 +141,29 @@ public:
 
 	float rot_speed = 0;
 	vec3 rot;
-	float arm_length = 1.5f;
+	float armLength = 1.5f;
 
 	glm::mat4 v = glm::mat4(1.0f), p = glm::mat4(1.0f);
 	glm::mat4 vp = glm::mat4(1.0f);
+
+	static CameraShaderUniformBuffer *UBO;
+
+	void init() {
+		if (!UBO) {
+			UBO = new CameraShaderUniformBuffer();
+			UBO->create();
+		}
+	}
 
 	virtual void tick(float dt) {
 		bIsGetTransInThisTick = 0;
 		bIsGetVPInThisTick = 0;
 	}
 
-	virtual void render() {}
+	virtual void bind(Window& win) {
+		UBO->setData(*this, win);
+		UBO->bindBuffer();
+	}
 
 	glm::mat4& getTrans(Window& win) {
 		if (bIsGetTransInThisTick) return vp;
@@ -124,18 +184,16 @@ public:
 			}
 			bIsGetVPInThisTick |= 0b1;
 		}
-		mat4 m(1);
-		m = rotate(m, radians(rot.z), vec3(0, 0, -1));
-		vp = p * m * v;
+		vp = p * v;
 		bIsGetTransInThisTick = 1;
 		return vp;
 	}
 
-	void rotateY(float y) {
+	void rotateArmY(float y) {
 		rot.y += y;
-		pos.z = cos(De2Ra(rot.y)) * arm_length;
-		pos.x = sin(De2Ra(rot.y)) * arm_length;
-		pos.y = arm_length * 0.7f;
+		pos.z = cos(De2Ra(rot.y)) * armLength;
+		pos.x = sin(De2Ra(rot.y)) * armLength;
+		pos.y = armLength * 0.7f;
 	}
 
 	void rotateZ(float z) {
@@ -151,6 +209,16 @@ private:
 	uint bIsGetTransInThisTick = 0;
 	uint bIsGetVPInThisTick = 0;
 };
+
+
+CameraShaderUniformBuffer* Camera::UBO = nullptr;
+
+
+void CameraShaderUniformBuffer::setData(Camera& cam, Window& win) {
+	this->p = &cam.p;
+	this->v = &cam.v;
+	this->vp = &cam.getTrans(win);
+}
 
 
 class IShaderUniform {
@@ -299,32 +367,6 @@ private:
 	}
 };
 
-class CameraShaderUniformBuffer {
-public:
-	unsigned int UBO;
-	mat4* p, * v, * vp;
-
-	void create(Camera& cam, Window& win) {
-		glGenBuffers(1, &UBO);
-		glBindBuffer(GL_UNIFORM_BUFFER, UBO);
-		glBufferData(GL_UNIFORM_BUFFER, sizeof(mat4) * 3, NULL, GL_STATIC_DRAW); // 152 바이트 메모리 할당
-		setData(cam, win);
-	}
-
-	void setData(Camera& cam, Window& win) {
-		this->p = &cam.p;
-		this->v = &cam.v;
-		this->vp = &cam.getTrans(win);
-	}
-
-	// 값변경될때마다 한번만 호출하면되나
-	void bindBuffer() {
-		glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(glm::mat4), p);
-		glBufferSubData(GL_UNIFORM_BUFFER, sizeof(glm::mat4), sizeof(glm::mat4), v);
-		glBufferSubData(GL_UNIFORM_BUFFER, 2 * sizeof(glm::mat4), sizeof(glm::mat4), vp);
-		glBindBufferBase(GL_UNIFORM_BUFFER, 0, UBO);
-	}
-};
 
 
 class Obj : public TickObj {
@@ -366,8 +408,14 @@ public:
 		shader->addUniform("trans", &getTrans()); // TODO 낭비됨 계속 똑같은거 추가함
 	}
 
+	void rotateX(float x) {
+		bIsGetTransInThisTick = false; rot.x += x;
+	}
 	void rotateY(float y) {
 		bIsGetTransInThisTick = false; rot.y += y;
+	}
+	void rotateZ(float z) {
+		bIsGetTransInThisTick = false; rot.z += z;
 	}
 
 	void changedTransform() {
@@ -392,7 +440,7 @@ public:
 	virtual void tick(float dt) {
 	}
 
-	void setColor(GLuint shaderId) {
+	void applyColor(GLuint shaderId) {
 		unsigned int loc = glGetUniformLocation(shaderId, "vcolor");
 		glUniform3f(loc, color.x, color.y, color.z);
 	}
@@ -401,7 +449,7 @@ public:
 		if (shader) {
 			shader->changeUniformValue("trans", &getTrans());
 			shader->use();
-			setColor(shader->id);
+			applyColor(shader->id);
 		}
 		vo->render();
 	}

@@ -381,18 +381,53 @@ private:
 
 class Orbit : public Obj {
 public:
-	Obj* parentObj;
+	Obj* parentObj = nullptr;
 	vector<Obj*> childObjs;
 
+	VO* orbitVO = nullptr;
+
+	mat4 orbitTrans;
+
+	Orbit(float len = 1) {
+		pos.x = len;
+	}
+
+	void initOrbit() {
+		orbitVO = new VO();
+
+		for (size_t i = 0; i < 60; i++) {
+			float _x = cos(De2Ra(i * 6));
+			float _y = sin(De2Ra(i * 6));
+			orbitVO->vertex.push_back(vec3(_x, 0, _y));
+		}
+		orbitVO->bind();
+		orbitVO->drawStyle = GL_LINE_LOOP;
+	}
+
 	virtual void tick(float dt) {
-		auto parentTrans = parentObj->getTrans();
+
 		pos.x = 1;
 		rot.y += speed;
 		trans = glm::mat4(1.0f);
 		trans = glm::rotate(trans, glm::radians(rot.x), glm::vec3(1, 0, 0));
 		trans = glm::rotate(trans, glm::radians(rot.y), glm::vec3(0, 1, 0));
 		trans = glm::translate(trans, pos);
-		trans = parentTrans * trans;
+		if (parentObj) {
+			trans = parentObj->getTrans() * trans;
+		}
+
+		orbitTrans = glm::mat4(1.0f);
+		//orbitTrans = glm::translate(orbitTrans, pos);
+		orbitTrans = glm::rotate(orbitTrans, glm::radians(rot.x), glm::vec3(1, 0, 0));
+		if (parentObj) {
+			orbitTrans = parentObj->getTrans() * orbitTrans;
+		}
+	}
+
+	void render() {
+		if(orbitVO)
+		orbitVO->render();
+		//Obj::render();
 	}
 };
 
@@ -421,6 +456,7 @@ void init() {
 	triShader.complieShader("tri");
 	gridShader.complieShader("grid");
 
+	//objs = new Orbit(0);
 	triShader.addUniform("trans", &objs[0].getTrans());
 
 	gridShader.addUniform("trans", mat4(1));
@@ -430,7 +466,6 @@ void init() {
 	camShader.create(cam, win);
 	camShader.bindBuffer();
 
-	//objs[0].loadObj("../model/sphere.obj");
 
 	orbit[0].parentObj = &objs[0];
 	orbit[0].rot.x = -45;
@@ -444,6 +479,11 @@ void init() {
 	orbit[3].parentObj = &orbit[0];
 	orbit[4].parentObj = &orbit[1];
 	orbit[5].parentObj = &orbit[2];
+
+	for (size_t i = 0; i < 6; i++) {
+		orbit[i].initOrbit();
+	}
+	//objs[0].initOrbit();
 
 
 	gridVO.drawStyle = GL_LINES;
@@ -491,6 +531,9 @@ GLvoid drawScene() {
 		triShader.changeUniformValue("trans", &orbit[i].trans);
 		triShader.use();
 		gluSphere(qobj, 0.1f, 6, 4);
+		triShader.changeUniformValue("trans", &orbit[i].orbitTrans);
+		triShader.use();
+		orbit[i].render();
 	}
 
 	triShader.changeUniformValue("trans", &objs[0].getTrans());
@@ -522,7 +565,7 @@ void main(int argc, char** argv) // 윈도우 출력하고 콜백함수 설정
 	glutInit(&argc, argv); // glut 초기화
 	glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA | GLUT_DEPTH); // 디스플레이 모드 설정
 	win.init(800, 600);
-	glutInitWindowPosition(1920, 30); // 윈도우의 위치 지정
+	glutInitWindowPosition(0, 30); // 윈도우의 위치 지정
 	glutInitWindowSize(win.w, win.h); // 윈도우의 크기 지정
 	glutCreateWindow("Example1"); // 윈도우 생성(윈도우 이름)
 
