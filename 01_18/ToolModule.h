@@ -178,7 +178,7 @@ public:
 		}
 		if (~bIsGetVPInThisTick & 0b1) {
 			if (isPerspective)
-				p = glm::perspective(glm::radians(fov), win.ratio, 0.1f, 100.f);
+				p = glm::perspective(glm::radians(fov), win.ratio, 0.1f, 1000.f);
 			else {
 				float size = 5;
 				p = glm::ortho<float>(-size * win.ratio, size * win.ratio, -size, size, 0.1, 50.f);
@@ -204,7 +204,7 @@ public:
 		armRot.y += y;
 		pos.z = cos(De2Ra(armRot.y)) * armLength;
 		pos.x = sin(De2Ra(armRot.y)) * armLength;
-		pos.y = armLength * 0.7f;
+		pos.y = armLength * 0.3f;
 	}
 
 	void rotateY(float y) {
@@ -393,7 +393,7 @@ public:
 	Shader* shader = nullptr;
 
 	glm::mat4 trans = glm::mat4(1.0f);
-	vec3 color = vec3(1,0,0);
+	vec3 color = vec3(1,1,1);
 
 	string name;
 
@@ -440,7 +440,6 @@ public:
 	glm::mat4& getTrans() {
 		//if (bIsGetTransInThisTick) return trans;
 		trans = glm::mat4(1.0f);
-		//trans = glm::rotate(trans, glm::radians(rotrot), glm::vec3(0.0, 1, 0));
 		trans = glm::translate(trans, pos);
 		trans = glm::scale(trans, scale);
 		trans = glm::rotate(trans, glm::radians(rot.y), glm::vec3(0.0, 1, 0));
@@ -465,6 +464,8 @@ public:
 			shader->changeUniformValue("trans", &getTrans());
 			shader->use();
 			applyColor(shader->id);
+		} else {
+			assert(0); // shader ¾øÀ½
 		}
 		vo->render();
 	}

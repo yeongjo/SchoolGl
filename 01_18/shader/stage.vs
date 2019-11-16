@@ -19,7 +19,14 @@ vec3 vec3Random(vec3 st) {
   return -1.0 + 2.0 * fract(sin(st) * 43758.633);
 }
 
+vec2 vec2Random(vec2 st) {
+  st = vec2(dot(st, vec2(0.040,-0.250)),
+  dot(st, vec2(269.5,183.3)));
+  return -1.0 + 2.0 * fract(sin(st) * 43758.633);
+}
+
 void main(){
 	gl_Position = vp*trans*vec4(pos,1);
-	vertexColor = vec3Random(vec3(gl_VertexID));
+	//vertexColor = abs((trans*vec4(pos,1)).xyz - vec3(0,-5,0));
+	vertexColor = vec3Random(vec3((gl_VertexID/6)));
 }
