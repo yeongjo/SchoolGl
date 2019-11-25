@@ -408,6 +408,18 @@ public:
 		Scene::removeObj(this);
 	}
 
+	const vec3& getPos() const {
+		return pos;
+	}
+
+	const vec3& getRotation() const {
+		return rot;
+	}
+
+	const vec3& getScale() const {
+		return scale;
+	}
+
 	void setPos(const vec3& p) {
 		pos = p; bIsGetTransInThisTick = false;
 	}
@@ -433,7 +445,7 @@ public:
 		bIsGetTransInThisTick = false; rot.z += z;
 	}
 
-	void changedTransform() {
+	void updateTransform() {
 		bIsGetTransInThisTick = false;
 	}
 
