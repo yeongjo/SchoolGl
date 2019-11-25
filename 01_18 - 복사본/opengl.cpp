@@ -1,19 +1,54 @@
 ﻿#include "ToolModule.h"
-#include <stack>
-#include "../glm/gtx/spline.hpp"
 
 using namespace std;
 using namespace glm;
 
-int render_line_idx = 0;
+
+class RobotPart : public Obj {
+public:
+	vec3 rotSpeed = vec3(0,0,60);
+
+	void tick(float dt) {
+		float z = rotSpeed.z * dt;
+
+		Obj::rotateZ(z);
+		if (rot.z < -45 || rot.z > 45) rotSpeed.z = -rotSpeed.z;
+	}
+};
 
 
-
-
-class CraneObj : public Obj {
+class Robot : public Obj {
 public:
 	vec3 rotSpeed;
-	float moveSpeed=1;
+	vec3 moveSpeed;
+	RobotPart leg[2];
+	RobotPart arm[2];
+
+	float accel = 0;
+	float gravity = -3.f;
+
+	void initParts(){
+		for (size_t i = 0; i < 2; i++) {
+			arm[i].loadObj("../model/opengl_0118_robot/robot_arm.obj");
+			arm[i].parentObj = this;
+			arm[i].setShader(shader);
+			arm[i].color = randColor();
+		}
+		arm[1].rotateY(180);
+
+		for (size_t i = 0; i < 2; i++) {
+			leg[i].loadObj("../model/opengl_0118_robot/robot_leg.obj");
+			leg[i].parentObj = this;
+			leg[i].setShader(shader);
+			leg[i].color = randColor();
+			leg[i].setPos(vec3(0, -0.7f, 0));
+		}
+		leg[1].rotateY(180);
+	}
+
+	void jump() {
+		accel = 0.6f;
+	}
 
 	void tick(float dt) {
 		float x = rotSpeed.x*dt;
@@ -27,13 +62,30 @@ public:
 
 		Obj::rotateZ(z);
 		if (rot.z < -90 || rot.z > 90) rotSpeed.z = -rotSpeed.z;
-	}
-	void translateX(float dt) {
-		setPos(vec3(pos.x + moveSpeed * dt, pos.y, pos.z));
-		if (pos.x > 1 || pos.x < -1) {
-			moveSpeed = -moveSpeed;
+
+		accel += gravity * dt;
+		pos.y += accel;
+		if (pos.y < 0) {
+			accel = 0;
+			pos.y = 0;
 		}
+
+
+		pos += moveSpeed * dt * 12.0f;
+
+		if (pos.x < -14 || pos.x > 14)
+			move(-moveSpeed.x, moveSpeed.z);
+		if (pos.z < -14 || pos.z > 14)
+			move(moveSpeed.x, -moveSpeed.z);
 	}
+
+	void move(float x, float z) {
+		moveSpeed.x = x;
+		moveSpeed.z = z;
+		float angle = glm::atan(moveSpeed.x, moveSpeed.z);
+		rot.y = glm::degrees(angle - 90) + 30;
+	}
+
 	void rotateX(float x) {
 		rotSpeed.x = x;
 	}
@@ -54,6 +106,29 @@ public:
 		resetRotateSpeed();
 		rot = vec3();
 	}
+	void resetTrans() {
+		resetRotate();
+		pos = vec3();
+		scale = vec3(1);
+	}
+};
+
+
+class StageDoor : public Obj {
+public:
+	bool isOpen = false;
+
+	void tick(float dt) {
+		float speed = 3.0f;
+
+		if (isOpen) {
+			pos.y += dt * speed;
+			if (pos.y > 5) pos.y = 5;
+		}else{
+			pos.y -= dt * speed;
+			if (pos.y < 0) pos.y = 0;
+		}
+	}
 };
 
 
@@ -62,9 +137,12 @@ Camera cam;
 
 VO gridVO;
 
-CraneObj*craneObj[3];
+Robot *robotObj;
 
-Shader triShader, gridShader;
+Obj* stage;
+StageDoor* stageDoor;
+
+Shader triShader, gridShader, stageShader;
 
 
 bool isTimerEnd = false;
@@ -74,25 +152,35 @@ void init() {
 
 	triShader.complieShader("tri");
 	gridShader.complieShader("grid");
+	stageShader.complieShader("stage");
 
 	cam.init();
 
-	for (size_t i = 0; i < 3; i++) {
-		craneObj[i] = new CraneObj();
-		stringstream ss;
-		ss << "../model/opengl_0116/body" << (i+1) << ".obj";
-		craneObj[i]->loadObj(ss.str().c_str());
-		craneObj[i]->setShader(&triShader);
-		craneObj[i]->color = vec3(f(), f(), f());
-	}
-	craneObj[1]->setPos(vec3(0, 0.5f, 0));
-	craneObj[2]->setPos(vec3(0, 0.5f,0));
+	stage = new Obj();
+	stageDoor = new StageDoor();
 
-	craneObj[1]->parentObj = craneObj[0];
-	craneObj[2]->parentObj = craneObj[1];
-	
-	cam.armLength = 10;
-	cam.rotateArmY(30);
+	stage->loadObj("../model/opengl_0115/cube.obj");
+	stageDoor->loadObj("../model/opengl_0115/cube_front.obj");
+	stageDoor->setPos(vec3(0, 0, 1));
+	stage->name = "stage";
+	stage->setScale(vec3(15, 15, 15));
+	//stageDoor->setScale(vec3(15, 15, 15));
+	stage->setPos(vec3(0, -3, 0));
+	stageDoor->setPos(vec3(1, 0, 0));
+	stage->setRotation(vec3(0, -90, 0));
+	stageDoor->setRotation(vec3(0, 0, 0));
+	stageDoor->parentObj = stage;
+	stage->setShader(&stageShader);
+	stageDoor->setShader(&triShader);
+
+	robotObj = new Robot();
+	robotObj->loadObj("../model/opengl_0118_robot/robot_body.obj");
+	robotObj->setShader(&stageShader);
+	robotObj->color = randColor();
+	robotObj->initParts();
+
+	cam.armLength = 40;
+	cam.rotateArmY(0);
 
 	gridVO.drawStyle = GL_LINES;
 	gridVO.vertex.push_back(vec3(0, 100, 0));
@@ -123,7 +211,6 @@ void loop() {
 	prevTime = thisTickTime;
 
 	cam.tick(dt);
-	craneObj[0]->translateX(dt);
 	Scene::activeScene->tick(dt);
 	
 	glutPostRedisplay();
@@ -211,58 +298,47 @@ void Keyboard(unsigned char key, int x, int y)
 	debug("Keyboard down: %c [x:%d, y:%d]", key, x, y);
 	
 	switch (key) {
-	case 'b':
-		craneObj[0]->rotateY(40);
+	case 'w':
+		robotObj->move(0, -1);
 		break;
-	case 'B':
-		craneObj[0]->rotateY(-40);
-		break;
-	case 'm':
-		craneObj[1]->rotateX(40);
-		break;
-	case 'M':
-		craneObj[1]->rotateX(-40);
-		break;
-	case 't':
-		craneObj[2]->rotateZ(40);
-		break;
-	case 'T':
-		craneObj[2]->rotateZ(-40);
+	case 'a':
+		robotObj->move(-1, 0);
 		break;
 	case 's':
-	{
-		for (size_t i = 0; i < 3; i++) {
-			craneObj[i]->resetRotateSpeed();
-		}
-	}
+		robotObj->move(0, 1);
 		break;
-	case 'c':
-	{
-		for (size_t i = 0; i < 3; i++) {
-			craneObj[i]->resetRotate();
-		}
-	}
+	case 'd':
+		robotObj->move(1, 0);
+		break;
+	case 'r':
+		robotObj->resetRotate();
+		break;
+	case 'e':
+		stageDoor->isOpen = !stageDoor->isOpen;
+		break;
+	case 'f':
+		robotObj->jump();
 		break;
 
-	case 'z':
+	case 'k':
 		cam.translate(vec3(0, 0, 1));
 		break;
-	case 'Z':
+	case 'i':
 		cam.translate(vec3(0, 0, -1));
 
 		break;
-	case 'x':
+	case 'j':
 		cam.translate(vec3(1, 0, 0));
 
 		break;
-	case 'X':
+	case 'l':
 		cam.translate(vec3(-1, 0, 0));
 
 		break;
-	case 'r':
+	case 'o':
 		cam.rotateY(10);
 		break;
-	case 'R':
+	case 'u':
 		cam.rotateY(-10);
 		break;
 
