@@ -22,9 +22,6 @@ void main(){
 	vec3 lightDir = normalize(lightPos - fragPos);
 	vec3 diffuse = max(dot(normal, lightDir), 0) * lightColor;
 
-	//color = vec4(lightPos,1) * vec4(vcolor,1);
-	//color = vec4(lightColor,1);
-	//return;
 	vec3 result = (diffuse+ambient) * vcolor;
 	color = vec4(result, 1.0);
 }
