@@ -1,5 +1,6 @@
 #pragma once
 #include "inc/mGlHeader2.h"
+#include "../glm/gtx/string_cast.hpp"
 #include <map>
 #include <set>
 #include <queue>
@@ -111,11 +112,15 @@ class CameraShaderUniformBuffer {
 public:
 	unsigned int UBO;
 	mat4* p, * v, * vp;
+	vec3* pos;
 
 	void create() {
 		glGenBuffers(1, &UBO);
 		glBindBuffer(GL_UNIFORM_BUFFER, UBO);
-		glBufferData(GL_UNIFORM_BUFFER, sizeof(mat4) * 3, NULL, GL_STATIC_DRAW); // 152 바이트 메모리 할당
+		//https://learnopengl.com/Advanced-OpenGL/Advanced-GLSL
+		glBufferData(GL_UNIFORM_BUFFER,
+			sizeof(mat4) * 3 + sizeof(vec4),
+			NULL, GL_STATIC_DRAW); // mat4 3개, vec3 1개 할당
 	}
 
 	void setData(Camera& cam, Window& win);
@@ -125,6 +130,7 @@ public:
 		glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(glm::mat4), p);
 		glBufferSubData(GL_UNIFORM_BUFFER, sizeof(glm::mat4), sizeof(glm::mat4), v);
 		glBufferSubData(GL_UNIFORM_BUFFER, 2 * sizeof(glm::mat4), sizeof(glm::mat4), vp);
+		glBufferSubData(GL_UNIFORM_BUFFER, 3 * sizeof(glm::mat4), sizeof(glm::vec3), pos); // 카메라 위치
 		glBindBufferBase(GL_UNIFORM_BUFFER, 0, UBO);
 	}
 };
@@ -242,6 +248,7 @@ public:
 	virtual void setValuePtr(void* ptr) = 0;
 	virtual void setValueUniquePtr(void* ptr) = 0;
 	virtual void setUniform(void* ptr = nullptr) = 0;
+	virtual void log() = 0;
 };
 
 
@@ -297,6 +304,10 @@ public:
 	void setValueUniquePtr(void* ptr) {
 		setValueUniquePtr((T*)ptr);
 	}
+
+	void log() {
+		debug("[%d]%s: %s", uniformLocation, uniformName.c_str(), glm::to_string(*valuePtr).c_str());
+	}
 };
 
 
@@ -307,8 +318,18 @@ void ShaderUniform<mat4>::setUniformWithType(void* ptr) {
 
 template<>
 void ShaderUniform<vec3>::setUniformWithType(void* ptr) {
-	glUniform3f(uniformLocation, 1, GL_FALSE, *(GLfloat*)ptr);
+	glUniform3fv(uniformLocation, 1, (GLfloat*)ptr);
 }
+
+//template<>
+//void ShaderUniform<mat4>::log() {
+//	debug("[%d]%s: %s", uniformLocation, uniformName, glm::to_string(*valuePtr));
+//}
+//
+//template<>
+//void ShaderUniform<vec3>::log() {
+//	debug("[%d]%s: %s", uniformLocation, uniformName, glm::to_string(*valuePtr));
+//}
 
 
 class Shader {
@@ -368,6 +389,22 @@ public:
 			}
 	}
 
+	void logAllUniforms() {
+		if (!shaderUniforms.empty())
+			for (auto it = shaderUniforms.begin(); it != shaderUniforms.end(); it++) {
+				it->second->log();
+			}
+		else
+			debug("%s has no uniforms", shaderPath);
+	}
+
+	void logUniform(string name) {
+		if (!shaderUniforms.empty())
+			getUniform(name.c_str())->log();
+		else
+			debug("%s has no uniforms", shaderPath);
+	}
+
 private:
 	void insertShaderUniform(IShaderUniform* uniform, const string& name, void* ptr) {
 		uniform->setName(id, name);
@@ -408,15 +445,15 @@ public:
 		Scene::removeObj(this);
 	}
 
-	const vec3& getPos() const {
+	vec3& getPos(){
 		return pos;
 	}
 
-	const vec3& getRotation() const {
+	vec3& getRotation(){
 		return rot;
 	}
 
-	const vec3& getScale() const {
+	vec3& getScale(){
 		return scale;
 	}
 

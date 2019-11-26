@@ -74,10 +74,10 @@ GLuint complieShader(const char* shader) {
 	char* t_fs = readTxt(s_fs.str().c_str());
 
 	std::stringstream ss;
-	ss << "ERROR: " << shader << "vertex shader 컴파일 실패 :";
+	ss << "ERROR: [" << shader << "] vertex shader 컴파일 실패 :\n";
 	GLuint vs = compliePartShader(t_vs, GL_VERTEX_SHADER, ss.str().c_str());
 	ss.clear(); ss.str("");
-	ss << "ERROR: " << shader << "fragment shader 컴파일 실패 :";
+	ss << "ERROR: [" << shader << "] fragment shader 컴파일 실패 :\n";
 	GLuint fs = compliePartShader(t_fs, GL_FRAGMENT_SHADER, ss.str().c_str());
 
 	GLuint ShaderProgramID = glCreateProgram(); //--- 세이더 프로그램 만들기
@@ -138,31 +138,31 @@ public:
 		glGenVertexArrays(1, &VAO);
 		glGenBuffers(1, &VBO);
 		size_t bufferOff = 0;
-		size_t totalBufferSize = (vertex.size()+ color.size()+ normal.size())*3 + uv.size()*2;
+		size_t totalBufferSize = ((vertex.size()+ color.size()+ normal.size())*3 + uv.size()*2) * sizeof(float);
 		glBindVertexArray(VAO);
 		glBindBuffer(GL_ARRAY_BUFFER, VBO);
-		glBufferData(GL_ARRAY_BUFFER, totalBufferSize * sizeof(float), 0, GL_STATIC_DRAW);
-		glBufferSubData(GL_ARRAY_BUFFER, 0, vertex.size() * 3 * sizeof(float), &vertex[0]);
-		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+		glBufferData(GL_ARRAY_BUFFER, totalBufferSize, 0, GL_STATIC_DRAW);
+		glBufferSubData(GL_ARRAY_BUFFER, 0, vertex.size() * sizeof(vec3), &vertex[0]);
+		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(vec3), (void*)0);
 		glEnableVertexAttribArray(0);
-		bufferOff += vertex.size()*3 * sizeof(float);
+		bufferOff += vertex.size() * sizeof(vec3);
 		if (color.size() > 0) {
-			glBufferSubData(GL_ARRAY_BUFFER, bufferOff, color.size() * 3 * sizeof(float), &color[0]);
-			glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)(bufferOff));
+			glBufferSubData(GL_ARRAY_BUFFER, bufferOff, color.size() * sizeof(vec3), &color[0]);
+			glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(vec3), (void*)bufferOff);
 			glEnableVertexAttribArray(1);
-			bufferOff += color.size() * 3 * sizeof(float);
+			bufferOff += color.size() * sizeof(vec3);
 		}
 		if (normal.size() > 0) {
-			glBufferSubData(GL_ARRAY_BUFFER, bufferOff * sizeof(float), normal.size() * 3 * sizeof(float), &normal[0]);
-			glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)(bufferOff));
+			glBufferSubData(GL_ARRAY_BUFFER, bufferOff, normal.size() * sizeof(vec3), &normal[0]);
+			glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(vec3), (void*)bufferOff);
 			glEnableVertexAttribArray(2);
-			bufferOff += normal.size() * 3 * sizeof(float);
+			bufferOff += normal.size() * sizeof(vec3);
 		}
 		if (uv.size() > 0) {
-			glBufferSubData(GL_ARRAY_BUFFER, bufferOff * sizeof(float), uv.size() * 2 * sizeof(float), &uv[0]);
-			glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)(bufferOff));
+			glBufferSubData(GL_ARRAY_BUFFER, bufferOff, uv.size() * sizeof(vec3), &uv[0]);
+			glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, sizeof(vec2), (void*)bufferOff);
 			glEnableVertexAttribArray(3);
-			bufferOff += uv.size() * 3 * sizeof(float);
+			bufferOff += uv.size() * sizeof(vec2);
 		}
 
 		isBind = true;

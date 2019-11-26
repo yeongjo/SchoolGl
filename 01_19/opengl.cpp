@@ -58,9 +58,9 @@ public:
 
 class Light : public Obj{
 public:
-	float rotSpeed = 10;
+	float rotSpeed = 2;
 	bool isRotating = true;
-	float length = 2;
+	float length = 5;
 	float delta = 0;
 
 	Light() : Obj(){
@@ -103,6 +103,7 @@ void init() {
 
 	auto obj = new Obj();
 	obj->loadObj("../model/opengl_0115/cube_top.obj");
+	obj->setPos(vec3(0, -1, 0));
 	obj->setScale(vec3(15, 15, 15));
 	obj->setShader(&triShader);
 
@@ -122,8 +123,16 @@ void init() {
 
 	light = new Light();
 	light->setShader(&triShader);
-	light->setPos(vec3(0, 2, 0));
-	
+	//light->setPos(vec3(0, 2, 0));
+	light->name = "light";
+	light->color = vec3(0);
+
+	triShader.addUniform("ambient", new vec3(0.1f, 0.1f, 0.1f));
+	triShader.addUniform("lightPos", &light->getPos());
+	triShader.addUniform("lightColor", new vec3(1.0f, 0, 1.0f));
+
+	triShader.logAllUniforms();
+
 	cam.armLength = 10;
 	cam.rotateArmY(30);
 
@@ -157,6 +166,7 @@ void loop() {
 
 	cam.tick(dt);
 	craneObj[0]->translateX(dt);
+	triShader.logUniform("lightPos");
 	Scene::activeScene->tick(dt);
 	
 	glutPostRedisplay();
