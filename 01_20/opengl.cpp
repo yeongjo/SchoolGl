@@ -147,7 +147,7 @@ void init() {
 
 	triShader.addUniform("ambient", new vec3(0.1f, 0.1f, 0.1f));
 	triShader.addUniform("lightPos", &light->getPos());
-	triShader.addUniform("lightColor", new vec3(1.0f, 1, 1.0f));
+	triShader.addUniform("lightColor", &light->color);
 
 	triShader.logAllUniforms();
 
@@ -301,6 +301,21 @@ void Keyboard(unsigned char key, int x, int y) {
 			changeDrawMode(GL_LINES);
 		else
 			changeDrawMode(GL_POLYGON);
+		break;
+
+	case '1':
+		light->rotSpeed = -light->rotSpeed;
+		break;
+
+	case '2':
+		light->isRotating = !light->isRotating;
+		break;
+	case '3':
+		if (light->color.x == 0) {
+			light->color = randColor();
+		} else {
+			light->color = vec3(0);
+		}
 		break;
 	case 'q': isTimerEnd = true;  glutLeaveMainLoop(); break;
 	}

@@ -129,7 +129,7 @@ void init() {
 
 	triShader.addUniform("ambient", new vec3(0.1f, 0.1f, 0.1f));
 	triShader.addUniform("lightPos", &light->getPos());
-	triShader.addUniform("lightColor", new vec3(1.0f, 0, 1.0f));
+	triShader.addUniform("lightColor", &light->color);
 
 	triShader.logAllUniforms();
 
@@ -303,7 +303,7 @@ void Keyboard(unsigned char key, int x, int y)
 
 		break;
 	case 'r':
-		cam.rotateY(10);
+		light->rotSpeed = -light->rotSpeed;
 		break;
 	case 'R':
 		cam.rotateY(-10);
@@ -315,6 +315,13 @@ void Keyboard(unsigned char key, int x, int y)
 
 	case '2':
 		light->isRotating = !light->isRotating;
+		break;
+	case '3':
+		if (light->color.x == 0) {
+			light->color = randColor();
+		} else {
+			light->color = vec3(0);
+		}
 		break;
 
 	case 'q': isTimerEnd = true;  glutLeaveMainLoop(); break;

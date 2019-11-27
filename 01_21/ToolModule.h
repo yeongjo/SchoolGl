@@ -239,6 +239,7 @@ void CameraShaderUniformBuffer::setData(Camera& cam, Window& win) {
 	this->p = &cam.p;
 	this->v = &cam.v;
 	this->vp = &cam.getTrans(win);
+	this->pos = &cam.pos;
 }
 
 
@@ -514,7 +515,7 @@ public:
 			shader->use();
 			applyColor(shader->id);
 		} else {
-			assert(0); // shader 없음
+			assert(0 && name.c_str()); // shader 없음
 		}
 		vo->render();
 	}
