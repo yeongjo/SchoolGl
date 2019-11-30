@@ -19,6 +19,8 @@ uniform vec3 lightColor;
 uniform vec3 vcolor;
 
 void main(){
+	//color = vec4(normal, 1.0);
+	//return;
 	vec3 lightDir = normalize(lightPos - fragPos);
 	vec3 diffuse = max(dot(normal, lightDir), 0) * lightColor;
 

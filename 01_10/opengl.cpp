@@ -136,6 +136,14 @@ public:
 		return trans;
 	}
 
+	vec3 getForward() {
+		vec3 forward;
+		forward.x = sin	(glm::radians(rot.y));
+		forward.y = -tan(glm::radians(rot.x));
+		forward.z = cos	(glm::radians(rot.y));
+		return forward;
+	}
+
 	virtual void tick(float dt) {
 		bIsGetTransInThisTick = false;
 		rot.y += dt * speed;

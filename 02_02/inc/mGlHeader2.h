@@ -1,3 +1,4 @@
+
 #include <iostream>
 #include <sstream>
 #include <glew.h>
@@ -73,6 +74,11 @@ GLuint complieShader(const char* shader) {
 	s_vs << ".vs";
 	char* t_vs = readTxt(s_vs.str().c_str());
 	char* t_fs = readTxt(s_fs.str().c_str());
+
+	if (!t_vs || !t_fs) {
+		printf("ERROR: [%s] 경로에 없음 컴파일 실패\n", shader);
+		return 0;
+	}
 
 	std::stringstream ss;
 	ss << "ERROR: [" << shader << "] vertex shader 컴파일 실패 :\n";
@@ -167,7 +173,7 @@ public:
 			bufferOff += normal.size() * sizeof(vec3);
 		}
 		if (uv.size() > 0) {
-			glBufferSubData(GL_ARRAY_BUFFER, bufferOff, uv.size() * sizeof(vec3), &uv[0]);
+			glBufferSubData(GL_ARRAY_BUFFER, bufferOff, uv.size() * sizeof(vec2), &uv[0]);
 			glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, sizeof(vec2), (void*)bufferOff);
 			glEnableVertexAttribArray(3);
 			bufferOff += uv.size() * sizeof(vec2);

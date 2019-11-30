@@ -1,15 +1,109 @@
 ﻿#include "ToolModule.h"
+#include "bullet.h"
+#include "../GL/GLDebugDrawer.h"
+
+GLDebugDrawer	gDebugDrawer;
+
+float stageSizeX = 40;
+float stageSizeZ = 40;
+
+void quat_2_euler_ogl(const quat& q, float& yaw, float& pitch, float& roll) {
+	float sqw = q.w * q.w;
+	float sqx = q.x * q.x;
+	float sqy = q.y * q.y;
+	float sqz = q.z * q.z;
+	pitch = asinf(2.0f * (q.y * q.z + q.w * q.x)); // rotation about x-axis
+	roll = atan2f(2.0f * (q.w * q.y - q.x * q.z), (-sqx - sqy + sqz + sqw)); // rotation about y-axis
+	yaw = atan2f(2.0f * (q.w * q.z - q.x * q.y), (-sqx + sqy - sqz + sqw)); // rotation about z-axis
+}
+
+const vec3 toVec3(btVector3 vec) {
+	return vec3(vec.getX(), vec.getY(), vec.getZ());
+}
+
+const quat toQuat(btQuaternion quaternion) {
+	quat t(quaternion.w(), quaternion.x(), quaternion.y(), quaternion.z());
+	return t;
+}
+
+class PhysicsObj : public Obj {
+public:
+	btRigidBody* body;
+	float mass;
+	vec3 physicsOrigin;
+
+	void setBoxPhysics(float mass, const vec3& origin=vec3(0), const vec3& boxSize=vec3(1)) {
+		btVector3 localInertia(0, 0, 0);
+		bool isDynamic = (mass != 0.f);
+		physicsOrigin = origin;
+
+		btTransform startTransform;
+		startTransform.setIdentity();
+		startTransform.setOrigin(btVector3(origin.x+pos.x, origin.y + pos.y, origin.z + pos.z));
+
+		btCollisionShape* colShape = new btBoxShape(btVector3(boxSize.x, boxSize.y, boxSize.z));
+		if (isDynamic)
+			colShape->calculateLocalInertia(mass, localInertia);
+
+		//using motionstate is recommended, it provides interpolation capabilities, and only synchronizes 'active' objects
+		btDefaultMotionState* myMotionState = new btDefaultMotionState(startTransform);
+		btRigidBody::btRigidBodyConstructionInfo rbInfo(mass, myMotionState, colShape, localInertia);
+
+		this->mass = mass;
+		body = new btRigidBody(rbInfo);
+		Bullet::dynamicsWorld->addRigidBody(body);
+	}
+
+	void tick(float dt) {
+		Obj::tick(dt);
+		if (body && body->getMotionState()) {
+			btTransform trans;
+			body->getMotionState()->getWorldTransform(trans);
+			pos = vec3(float(trans.getOrigin().getX()), float(trans.getOrigin().getY()), float(trans.getOrigin().getZ())) - physicsOrigin;
+
+			btQuaternion temRot = trans.getRotation();
+			quat q = toQuat(temRot);
+			quat_2_euler_ogl(q, rot.x, rot.z, rot.y);
+			rot = degrees(rot);
+			
+			/*if (name == "Robot") {
+				cout << glm::to_string(pos) << endl;
+			}*/
+		}
+	}
+
+	void move(vec3 vec) {
+		body->translate(btVector3(vec.x, vec.y, vec.z));
+		//body->translate
+	}
+
+	void rotate(vec3 vec) {
+		btTransform trans;
+		trans = body->getWorldTransform();
+		btQuaternion quaternion;
+		quaternion.setEuler(vec.y, vec.x, vec.z);
+		trans.setRotation(quaternion);
+		body->setWorldTransform(trans);
+		body->setAngularVelocity(btVector3(0, 0, 0));
+	}
+};
 
 class Light : public Obj {
 public:
 	float rotSpeed = 2;
 	bool isRotating = true;
-	float length = 5;
+	float length = 20;
 	float delta = 0;
 
 	Light() : Obj() {
 		loadObj("../model/sphere.obj");
+		setShader(Shader::shaders["tri"]);
 		scale = vec3(0.2f);
+		setLightToShader(*shader);
+	}
+
+	virtual void initName() {
+		name = "Light";
 	}
 
 	void tick(float dt) {
@@ -30,147 +124,305 @@ public:
 };
 
 
-class JohnSnow : public Obj {
+class RobotPart : public Obj {
 public:
-	float speed = -2;
+	vec3 rotSpeed = vec3(0, 0, 60);
 
-	virtual void tick(float dt) {
-		updateTransform();
-		pos.y += dt * speed;
-		if (pos.y < 0) {
-			pos.y = 2;
+	virtual void initName() {
+		name = typeid(this).name();
+	}
+
+	void tick(float dt) {
+		float z = rotSpeed.z * dt;
+
+		Obj::rotateZ(z);
+		if (rot.z < -45 || rot.z > 45) rotSpeed.z = -rotSpeed.z;
+	}
+};
+
+
+class StageDoor : public Obj {
+public:
+	bool isOpen = false;
+
+	void tick(float dt) {
+		float speed = 3.0f;
+
+		if (isOpen) {
+			pos.y += dt * speed;
+			if (pos.y > 5) pos.y = 5;
+		} else {
+			pos.y -= dt * speed;
+			if (pos.y < 0) pos.y = 0;
 		}
 	}
 };
 
 
-class ShapeObj : public Obj {
+class Player : public PhysicsObj {
 public:
-	float speed = 6;
-	virtual void tick(float dt) {
-		updateTransform();
-		rot.y += dt * speed;
+	Camera* cam;
+	vec2 moveVec;
+	float speed = 20;
+	float rotSpeed = 10;
+	float rotY = 0;
+
+	static Player* self;
+
+	Player(Camera* cam) : PhysicsObj(), cam(cam) {
+		loadObj("../model/numbers/9.obj");
+		setShader(Shader::shaders["tri"]);
+		cam->setParent(this);
+		self = this;
+	}
+
+	void tick(float dt) {
+		PhysicsObj::tick(dt);
+
+		if (Input::mouse[EMouse::MOUSE_L_BUTTON]) {
+			//debug("%d %d", Input::mouse[EMouse::MOUSE_OFF_X], Input::mouse[EMouse::MOUSE_OFF_Y]);
+			rotY += dt * rotSpeed * 0.03f * Input::mouse[EMouse::MOUSE_OFF_X];
+			rotate(vec3(0, rotY, 0));
+			if(cam->GetParent() != NULL)
+			cam->getRotation().x += dt * rotSpeed * Input::mouse[EMouse::MOUSE_OFF_Y];
+			//cam->getRotation().y += dt * rotSpeed * Input::mouse[EMouse::MOUSE_OFF_X];
+		}
+
+		auto forward = getForward();
+		auto right = glm::cross(forward, cam->up);
+		if (cam->GetParent() == NULL) {
+			cam->setPos(pos);
+			forward = vec3(0, 0, 1);
+			right = vec3(-1, 0, 0);
+		}
+		move((speed * Input::moveVec.y *dt) * forward +
+			(speed * Input::moveVec.x * dt) * right);
+
+		Debug::drawLine(getForward()*3.0f+ pos, pos);
+
+		
+	}
+
+	void toggleQuaterView() {
+		if (cam->GetParent() == NULL) {
+			cam->setParent(this);
+			cam->armVector.z = -50;
+			cam->armVector.y = 0;
+			cam->setPos(vec3(0));
+		}
+		else {
+			cam->setParent(NULL);
+			cam->armVector.z = -100;
+			cam->armVector.y = 40;
+		}
+	}
+
+	virtual void render() {
+		if (cam->armVector.z < -1.f) {
+			Obj::render();
+		}
+	}
+
+	virtual void initName() {
+		name = "Player";
 	}
 };
 
-class Orbit : public Obj {
+Player* Player::self;
+
+class Robot : public PhysicsObj {
 public:
-	Obj* parentObj = nullptr;
-	vector<Obj*> childObjs;
+	vec3 moveSpeed;
+	RobotPart leg[2];
+	RobotPart arm[2];
 
-	VO* orbitVO = nullptr;
+	float accel = 0;
+	float gravity = -3.f;
 
-	mat4 orbitTrans;
+	Obj sightObj;
 
-	float speed = 2;
-	float arm = 3;
+	float sightLen = 15;
 
-	void initOrbit() {
-		orbitVO = new VO();
-
-		for (size_t i = 0; i < 60; i++) {
-			float _x = cos(De2Ra(i * 6)) * arm;
-			float _y = sin(De2Ra(i * 6)) * arm;
-			orbitVO->vertex.push_back(vec3(_x, 0, _y));
+	void initParts() {
+		moveSpeed = vec3(f()-0.5f, f() - 0.5f, f() - 0.5f);
+		for (size_t i = 0; i < 2; i++) {
+			arm[i].loadObj("../model/opengl_0118_robot/robot_arm.obj");
+			arm[i].setParent(this);
+			arm[i].setShader(shader);
+			arm[i].color = randColor();
 		}
-		orbitVO->bind();
-		orbitVO->drawStyle = GL_LINE_LOOP;
+		arm[1].rotateY(180);
+
+		for (size_t i = 0; i < 2; i++) {
+			leg[i].loadObj("../model/opengl_0118_robot/robot_leg.obj");
+			leg[i].setParent(this);
+			leg[i].setShader(shader);
+			leg[i].color = randColor();
+			leg[i].setPos(vec3(0, -0.7f, 0));
+		}
+		leg[1].rotateY(180);
+
+		sightObj.name = "sightObj";
+		sightObj.loadObj("../model/sphere.obj");
+		sightObj.setParent(this);
+		sightObj.setScale(vec3(sightLen));
+		sightObj.setShader(Shader::shaders["unlit"]);
+		sightObj.vo->drawStyle = GL_LINES;
 	}
 
-	virtual void tick(float dt) {
-		pos.x = arm;
-		rot.y += speed;
-		trans = parentObj->getTrans();
-		trans = glm::rotate(trans, glm::radians(rot.x), glm::vec3(1, 0, 0));
-		trans = glm::rotate(trans, glm::radians(rot.y), glm::vec3(0, 1, 0));
-		trans = glm::translate(trans, pos);
-		trans = glm::scale(trans, scale);
+	virtual void initName() {
+		name = "Robot";
+	}
 
-		if (parentObj) {
-			orbitTrans = parentObj->getTrans();
-			orbitTrans = glm::rotate(orbitTrans, glm::radians(rot.x), glm::vec3(1, 0, 0));
+	void jump() {
+		accel = 0.6f;
+	}
+
+	void tick(float dt) {
+		PhysicsObj::tick(dt);
+
+
+
+		if (pos.x < -stageSizeX)
+			moveSpeed.x = abs(moveSpeed.x);
+		if(pos.x > stageSizeX)
+			moveSpeed.x = -abs(moveSpeed.x);
+		if (pos.z < -stageSizeZ)
+			moveSpeed.z = abs(moveSpeed.z);
+		if (pos.z > stageSizeZ)
+			moveSpeed.z = -abs(moveSpeed.z);
+
+		auto offVec = Player::self->getPos() - pos;
+		auto len = glm::length(offVec);
+		if (len < sightLen) {
+			if (len < 5)
+				moveSpeed = vec3(0);
+			else {
+				auto forward = getForward();
+				auto angle = glm::dot(forward, glm::normalize(offVec));
+				auto sightAngle = glm::dot(forward, Player::self->getForward());
+				if (angle > 0.5f && sightAngle < -0.5f) {
+					moveSpeed = normalize(offVec);
+					Debug::drawLine(Player::self->getPos(), pos, vec3(0, 0, 1));
+				} else {
+					if (sightAngle < -0.5f) {
+						Debug::drawLine(Player::self->getPos(), pos, vec3(1, 0, 0));
+					}
+					if (angle > 0.5f) {
+						Debug::drawLine(Player::self->getPos(), pos, vec3(0, 1, 0));
+					}
+				}
+
+				Debug::drawLine(Player::self->getPos(), pos, vec3(0, 1, 1));
+			}
+		} else if(glm::length(moveSpeed)<0.1f){
+			moveSpeed = normalize(-offVec);
+		}
+		Debug::drawLine(getForward()*5.0f + pos, pos, vec3(1,1,0));
+		PhysicsObj::move(moveSpeed * 12.0f * dt);
+
+		//print("%f", rot.y);
+		if (glm::length(moveSpeed) > 0.1f) {
+			float angle = glm::atan(moveSpeed.x, moveSpeed.z);
+			vec3 t;
+			t.y = angle; glm::degrees(angle);
+			t.x = t.z = 0;
+			rotate(t);
 		}
 	}
 
 	void render() {
-		if (orbitVO) {
-			shader->changeUniformValue("trans", &orbitTrans);
-			shader->use();
-			orbitVO->render();
-		}
 		Obj::render();
+		sightObj.render();
 	}
 };
 
-
 Window win;
-Camera cam;
-Shader triShader, gridShader;
-
-ShapeObj* triObj;
-Obj* floorObj;
-
-Light* light;
-vector<Orbit*> orbits;
-vector<JohnSnow*> johnSnow;
+Camera* cam;
 
 VO gridVO;
 
-bool isTimerEnd = false;
+vector<Robot*> robotObj;
+Player* player;
 
+PhysicsObj* stage;
+
+vector<PhysicsObj*> obstacle;
+
+Light* light;
+
+Shader triShader, gridShader, stageShader;
+
+bool cameraFirstView = false;
+
+void onKeyboard(unsigned char key, int x, int y, bool isDown) {
+	if (isDown) {
+		switch (key) {
+		case 'r':
+			cam->armVector.z = cam->armVector.z < -1 ? -0.001f : -50;
+			printf("%f\n", cam->armVector.z);
+			break;
+		case '2': {
+			Player::self->toggleQuaterView();
+		}
+				break;
+		}
+		
+	}
+}
 
 void init() {
-	cam.init();
-	cam.pos.y = 4;
+	glLineWidth(3);
 
 	triShader.complieShader("tri");
 	gridShader.complieShader("grid");
 
-	triObj = new ShapeObj();
-	floorObj = new Obj();
-
-	floorObj->loadObj("../model/cube.obj");
-	triObj->loadObj("../model/tri.obj");
-
-	floorObj->setShader(&triShader);
-	triObj->setShader(&triShader);
-
-	floorObj->setScale(vec3(5, 0.1f, 5));
-	floorObj->getPos().x = -1;
-
-	orbits.push_back(new Orbit());
-	orbits.push_back(new Orbit());
-	orbits.push_back(new Orbit());
-	int armLen = 3;
-	int speed = 1;
-	for (auto var : orbits) {
-		armLen += 2;
-		speed++;
-		var->arm = armLen;
-		var->speed = speed;
-		var->setShader(&triShader);
-		var->parentObj = triObj;
-		var->loadObj("../model/sphere.obj");
-		var->color = vec3(f(), f(), f());
-	}
-
-	for (size_t i = 0; i < 20; i++) {
-		johnSnow.push_back(new JohnSnow());
-		float x = f() * 10 - 5;
-		float y = f() * 1;
-		float z = f() * 10 - 5;
-
-		johnSnow.back()->loadObj("../model/cube.obj");
-		string name = "snow";
-		johnSnow.back()->name = name+ std::to_string(i);
-		johnSnow.back()->setPos(vec3(x,y,z));
-		johnSnow.back()->setScale(vec3(0.3f));
-		johnSnow.back()->setShader(&triShader);
-	}
+	cam = new Camera();
+	cam->armVector.z = -50;
+	player = new Player(cam);
 
 	light = new Light();
-	light->setLightToShader(triShader);
-	light->setShader(&triShader);
+	stage = new PhysicsObj();
+	robotObj.push_back(new Robot());
+	robotObj.push_back(new Robot());
+	robotObj.push_back(new Robot());
+	robotObj.push_back(new Robot());
+	obstacle.push_back(new PhysicsObj());
+	obstacle.push_back(new PhysicsObj());
+	obstacle.push_back(new PhysicsObj());
+	obstacle.push_back(new PhysicsObj());
+
+	player->setPos(vec3(4, 0, 2));
+	player->color = vec3(1, .5f, .5f);
+
+
+	stage->loadObj("../model/cube.obj");
+	stage->name = "stage";
+	stage->setScale(vec3(stageSizeX, 1, stageSizeZ));
+	stage->setPos(vec3(0, -3, 0));
+	stage->setShader(&triShader);
+
+	for (size_t i = 0; i < robotObj.size(); i++) {
+		float randomPos = rand() % ((int)stageSizeX * 2) - stageSizeX;
+		robotObj[i]->loadObj("../model/opengl_0118_robot/robot_body.obj");
+		robotObj[i]->setShader(&triShader);
+		robotObj[i]->color = randColor();
+		robotObj[i]->setPos(vec3(randomPos, 0, randomPos));
+		robotObj[i]->initParts();
+
+		robotObj[i]->setBoxPhysics(1, vec3(0, -2, 0));
+	}
+	
+	stage->setBoxPhysics(0, vec3(0), stage->getScale());
+	player->setBoxPhysics(1, vec3(0, -2, 0));
+
+	for (size_t i = 0; i < obstacle.size(); i++) {
+		float randomPos = rand() % ((int)stageSizeX * 2) - stageSizeX;
+		obstacle[i]->loadObj("../model/cube.obj");
+		obstacle[i]->setPos(vec3(randomPos, 0, randomPos));
+		obstacle[i]->setBoxPhysics(3);
+		obstacle[i]->setShader(&triShader);
+	}
 
 	gridVO.drawStyle = GL_LINES;
 	gridVO.vertex.push_back(vec3(0, 100, 0));
@@ -180,21 +432,22 @@ void init() {
 	gridVO.vertex.push_back(vec3(0, 0, 100));
 	gridVO.vertex.push_back(vec3(0, 0, -100));
 	gridVO.bind();
+
+	auto objs = Scene::activeScene->objs;
+	for (set<TickObj*>::iterator it = objs.begin(); it != objs.end(); ++it) {
+		(*it)->initName();
+	}
+
+	onKeyboardEvent = onKeyboard;
 }
 
-
-float checkTime = 0;
-float direction = 1;
-bool stop = false;
 
 DWORD prevTime = 0;
 DWORD thisTickTime = 0;
 float dt;
+bool looping = false;
 
 void loop() {
-	if (stop) return;
-
-
 	if (prevTime == 0) {
 		prevTime = GetTickCount() - 10;
 	}
@@ -203,43 +456,42 @@ void loop() {
 	dt = dt > 0.05f ? dt = 0.05f : dt;
 	prevTime = thisTickTime;
 
-	cam.tick(dt);
+	cam->tick(dt);
+
+	Bullet::dynamicsWorld->stepSimulation(dt, 10);
 	Scene::activeScene->tick(dt);
+
+	Input::getMousePos();
 
 	glutPostRedisplay();
 }
 
-GLvoid drawScene() // 콜백 함수: 출력
+GLvoid drawScene()
 {
-	//printf("drawScene\n");
-	glClearColor(0, 0, 0, 1.0f); // 바탕색을 ‘blue’로 지정
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // 설정된 색으로 전체를 칠하기
+	float gray = 0.3f;
+	glClearColor(gray, gray, gray, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	cam.bind(win);
+	cam->bind(win);
 	Scene::activeScene->render();
 
 	gridShader.use();
 	gridVO.render();
+	Debug::render();
+	Bullet::dynamicsWorld->debugDrawWorld();
 
 	glutSwapBuffers(); // 화면에 출력하기
 }
 
 void timerFunc(int v) {
-	//r = f(), g = f(), b = f();
 	loop();
 	glutPostRedisplay();
-	if (!isTimerEnd)
+	if (!looping)
 		glutTimerFunc(10, timerFunc, 0);
 }
 
 GLvoid drawScene(GLvoid);
 GLvoid Reshape(int w, int h);
-void Keyboard(unsigned char key, int x, int y);
-void mouseHandler(int button, int state, int x, int y);
-void specialInput(int key, int x, int y);
-void keyboardUp(unsigned char key, int x, int y);
-void mouseMotionHandler(int x, int y);
-void mouseWheel(int wheel, int direction, int x, int y);
 
 void main(int argc, char** argv) // 윈도우 출력하고 콜백함수 설정 
 { //--- 윈도우 생성하기
@@ -251,6 +503,7 @@ void main(int argc, char** argv) // 윈도우 출력하고 콜백함수 설정
 	glutCreateWindow(__FILE__); // 윈도우 생성(윈도우 이름)
 
 	glEnable(GL_DEPTH_TEST);
+	//glEnable(GL_CULL_FACE);
 		//--- GLEW 초기화하기
 	glewExperimental = GL_TRUE;
 	if (glewInit() != GLEW_OK) {
@@ -261,109 +514,27 @@ void main(int argc, char** argv) // 윈도우 출력하고 콜백함수 설정
 	else
 		std::cout << "GLEW Initialized\n";
 
+	Shader unlit;
+	unlit.complieShader("unlit");
+	unlit.addUniform("color", new vec3(1,0,1));
+	unlit.addUniform("trans", new mat4(1));
+	Bullet::initBullet();
+	gDebugDrawer.setDebugMode(~0);
+	Bullet::dynamicsWorld->setDebugDrawer(&gDebugDrawer);
 	init();
 
 	glutDisplayFunc(drawScene); // 출력 함수의 지정
 	glutReshapeFunc(Reshape); // 다시 그리기 함수 지정
 
-	glutKeyboardFunc(Keyboard);
-	glutKeyboardUpFunc(keyboardUp);
-	glutMouseFunc(mouseHandler);
-	glutMotionFunc(mouseMotionHandler);
-	glutSpecialFunc(specialInput);
-	glutMouseWheelFunc(mouseWheel);
+	bindInput();
 
 	timerFunc(1);
 
 	glutMainLoop(); // 이벤트 처리 시작 
 }
 
-int renderIdx = 0;
-
 
 GLvoid Reshape(int w, int h) {
 	printf("Reshape\n");
 	glViewport(0, 0, w, h);
-}
-
-class Input {
-public:
-	map<
-};
-
-float cam_y = 20;
-float rot_speed = 60;
-void Keyboard(unsigned char key, int x, int y) {
-	debug("Keyboard down: %c [x:%d, y:%d]", key, x, y);
-	switch(key){
-	case '1':
-		light->rotSpeed = -light->rotSpeed;
-		break;
-
-	case '2':
-		light->isRotating = !light->isRotating;
-		break;
-	case '3':
-		if (light->color.x == 0) {
-			light->color = randColor();
-		} else {
-			light->color = vec3(0);
-		}
-		break;
-
-	case 'q': isTimerEnd = true;  glutLeaveMainLoop(); break;
-	}
-}
-
-void keyboardUp(unsigned char key, int x, int y) {
-	debug("Keyboard up: %c [x:%d, y:%d]", key, x, y);
-
-}
-
-void specialInput(int key, int x, int y) {
-	debug("specialInput: %c [x:%d, y:%d]", key, x, y);
-	/*switch (key) {
-	case GLUT_KEY_UP:
-		obj.pos.y += 0.1f;
-		break;
-	case GLUT_KEY_DOWN:
-		obj.pos.y -= 0.1f;
-
-		break;
-	case GLUT_KEY_LEFT:
-		obj.pos.x -= 0.1f;
-
-		break;
-	case GLUT_KEY_RIGHT:
-		obj.pos.x += 0.1f;
-
-		break;
-	}*/
-}
-
-void mouseWheel(int wheel, int direction, int x, int y) {
-	debug("Mouse: wheel(%d), direction(%d)", wheel, direction);
-}
-
-// button: 0(left), 1(mid), 2(right), 3(scrollup), 4(scrolldown)
-// state: 0(up), 1(down)
-void mouseHandler(int button, int state, int _x, int _y) {
-	float screenMouseX = _x / (Window::get().halfWidth / 2) - 1;
-	float screenMouseY = -_y / (Window::get().halfHeight / 2) + 1;
-	debug("Mouse: button(%d), state(%d), window(%d,%d), screen(%02f, %02f)", button, state, _x, _y, screenMouseX, screenMouseY);
-
-	switch (state) {
-		//case 0: // Mouse Down
-		//	cuttingObj->controller->startDrag(vec3(screenMouseX, screenMouseY, 0));
-		//	break;
-		//case 1: // Mouse Up
-		//	cuttingObj->controller->endDrag(vec3(screenMouseX, screenMouseY, 0));
-		//	break;
-	}
-}
-
-void mouseMotionHandler(int x, int y) {
-	float screenMouseX = x / (Window::get().halfWidth / 2) - 1;
-	float screenMouseY = -y / (Window::get().halfHeight / 2) + 1;
-	//cuttingObj->controller->setMovingMousePos(vec3(screenMouseX, screenMouseY, 0));
 }
