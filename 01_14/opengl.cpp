@@ -551,7 +551,7 @@ void main(int argc, char** argv) // 윈도우 출력하고 콜백함수 설정
 	glutInit(&argc, argv); // glut 초기화
 	glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA | GLUT_DEPTH); // 디스플레이 모드 설정
 	win.init(800, 600);
-	glutInitWindowPosition(1920, 30); // 윈도우의 위치 지정
+	glutInitWindowPosition(0, 30); // 윈도우의 위치 지정
 	glutInitWindowSize(win.w, win.h); // 윈도우의 크기 지정
 	glutCreateWindow("Example1"); // 윈도우 생성(윈도우 이름)
 

@@ -1,3 +1,4 @@
+
 #include <iostream>
 #include <sstream>
 #include <glew.h>
@@ -5,6 +6,7 @@
 #include <ext.hpp>
 #include <gtc/matrix_transform.hpp>
 #include <vector>
+#include <map>
 #include <algorithm>
 
 #define TINYOBJLOADER_IMPLEMENTATION // define this in only *one* .cc
@@ -73,6 +75,11 @@ GLuint complieShader(const char* shader) {
 	char* t_vs = readTxt(s_vs.str().c_str());
 	char* t_fs = readTxt(s_fs.str().c_str());
 
+	if (!t_vs || !t_fs) {
+		printf("ERROR: [%s] 경로에 없음 컴파일 실패\n", shader);
+		return 0;
+	}
+
 	std::stringstream ss;
 	ss << "ERROR: [" << shader << "] vertex shader 컴파일 실패 :\n";
 	GLuint vs = compliePartShader(t_vs, GL_VERTEX_SHADER, ss.str().c_str());
@@ -121,9 +128,16 @@ public:
 	//static const GLbyte color	= 0b0000'0001;//1
 	//static const GLbyte normal	= 0b0000'0010;//2
 	//static const GLbyte uv		= 0b0000'0100;//3
+
+	static map<string, VO*> loadedObjs;
 	
 	static VO* loadObj(const char *path) {
-		return readObj(path);
+		pair<map<string, VO*>::iterator, bool > pr;
+		pr = loadedObjs.insert(std::pair<string, VO*>(path, NULL));
+		if (pr.second == true) {
+			pr.first->second = readObj(path);
+		}
+		return pr.first->second;
 	}
 
 	void remove() {
@@ -138,7 +152,7 @@ public:
 		glGenVertexArrays(1, &VAO);
 		glGenBuffers(1, &VBO);
 		size_t bufferOff = 0;
-		size_t totalBufferSize = ((vertex.size() + color.size() + normal.size()) * 3 + uv.size() * 2) * sizeof(float);
+		size_t totalBufferSize = ((vertex.size()+ color.size()+ normal.size())*3 + uv.size()*2) * sizeof(float);
 		glBindVertexArray(VAO);
 		glBindBuffer(GL_ARRAY_BUFFER, VBO);
 		glBufferData(GL_ARRAY_BUFFER, totalBufferSize, 0, GL_STATIC_DRAW);
@@ -159,7 +173,7 @@ public:
 			bufferOff += normal.size() * sizeof(vec3);
 		}
 		if (uv.size() > 0) {
-			glBufferSubData(GL_ARRAY_BUFFER, bufferOff, uv.size() * sizeof(vec3), &uv[0]);
+			glBufferSubData(GL_ARRAY_BUFFER, bufferOff, uv.size() * sizeof(vec2), &uv[0]);
 			glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, sizeof(vec2), (void*)bufferOff);
 			glEnableVertexAttribArray(3);
 			bufferOff += uv.size() * sizeof(vec2);
@@ -169,6 +183,7 @@ public:
 	}
 
 	void render() {
+		if (vertex.size() == 0) return;
 		assert(isBind && "not binded VO used.");
 		glBindVertexArray(VAO);
 		if (verIdx == -1)
@@ -180,6 +195,8 @@ public:
 			glDrawArrays(drawStyle, 0, vertex.size());
 	}
 };
+
+map<string, VO*> VO::loadedObjs;
 
 glm::vec3 operator+ (glm::vec2& a, glm::vec3& b) {
 	return glm::vec3(a.x + b.x, a.y + b.y, b.z);
