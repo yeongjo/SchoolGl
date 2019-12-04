@@ -1,3 +1,4 @@
+
 #include <iostream>
 #include <sstream>
 #include <glew.h>
@@ -5,6 +6,7 @@
 #include <ext.hpp>
 #include <gtc/matrix_transform.hpp>
 #include <vector>
+#include <map>
 #include <algorithm>
 
 #define TINYOBJLOADER_IMPLEMENTATION // define this in only *one* .cc
@@ -22,8 +24,7 @@ float rc() {
 	return rand() % 255 / 255.f;
 }
 
-char* readTxt(const char* file)
-{
+char* readTxt(const char* file) {
 	FILE* fptr;
 	long length;
 	char* buf;
@@ -55,8 +56,7 @@ GLuint compliePartShader(char* ch, GLuint type, const char* errorName) {
 
 	glGetShaderiv(vs, GL_COMPILE_STATUS, &result);
 
-	if (!result)
-	{
+	if (!result) {
 		glGetShaderInfoLog(vs, 512, NULL, glErrorLog);
 		std::cerr << errorName << glErrorLog << std::endl;
 		return -1;
@@ -72,6 +72,11 @@ GLuint complieShader(const char* shader) {
 	s_vs << ".vs";
 	char* t_vs = readTxt(s_vs.str().c_str());
 	char* t_fs = readTxt(s_fs.str().c_str());
+
+	if (!t_vs || !t_fs) {
+		printf("ERROR: [%s] 경로에 없음 컴파일 실패\n", shader);
+		return 0;
+	}
 
 	std::stringstream ss;
 	ss << "ERROR: [" << shader << "] vertex shader 컴파일 실패 :\n";
@@ -121,15 +126,22 @@ public:
 	//static const GLbyte color	= 0b0000'0001;//1
 	//static const GLbyte normal	= 0b0000'0010;//2
 	//static const GLbyte uv		= 0b0000'0100;//3
-	
-	static VO* loadObj(const char *path) {
-		return readObj(path);
+
+	static map<string, VO*> loadedObjs;
+
+	static VO* loadObj(const char* path) {
+		pair<map<string, VO*>::iterator, bool > pr;
+		pr = loadedObjs.insert(std::pair<string, VO*>(path, NULL));
+		if (pr.second == true) {
+			pr.first->second = readObj(path);
+		}
+		return pr.first->second;
 	}
 
 	void remove() {
-		if(VAO)
+		if (VAO)
 			glDeleteVertexArrays(1, &VAO);
-		if(VBO)
+		if (VBO)
 			glDeleteBuffers(1, &VBO);
 	}
 
@@ -159,7 +171,7 @@ public:
 			bufferOff += normal.size() * sizeof(vec3);
 		}
 		if (uv.size() > 0) {
-			glBufferSubData(GL_ARRAY_BUFFER, bufferOff, uv.size() * sizeof(vec3), &uv[0]);
+			glBufferSubData(GL_ARRAY_BUFFER, bufferOff, uv.size() * sizeof(vec2), &uv[0]);
 			glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, sizeof(vec2), (void*)bufferOff);
 			glEnableVertexAttribArray(3);
 			bufferOff += uv.size() * sizeof(vec2);
@@ -169,6 +181,7 @@ public:
 	}
 
 	void render() {
+		if (vertex.size() == 0) return;
 		assert(isBind && "not binded VO used.");
 		glBindVertexArray(VAO);
 		if (verIdx == -1)
@@ -180,6 +193,8 @@ public:
 			glDrawArrays(drawStyle, 0, vertex.size());
 	}
 };
+
+map<string, VO*> VO::loadedObjs;
 
 glm::vec3 operator+ (glm::vec2& a, glm::vec3& b) {
 	return glm::vec3(a.x + b.x, a.y + b.y, b.z);
@@ -268,9 +283,9 @@ bool operator<(const vec2& a, const vec2& b) {
 - 두 직선이 평행이면(겹치는 경우 포함) 거짓을, 아니면 참을 반환한다.
 */
 bool lineIntersection(const vec2& a, const vec2& b, const vec2& c, const vec2& d, vec2& retX) {
-	float det = cross((b - a),(d - c)); //두선이 평행인 경우
-	if(fabs(det) < EPSILON) return false;
-	retX = a+(b-a)*(cross((c-a),(d-c))/det);
+	float det = cross((b - a), (d - c)); //두선이 평행인 경우
+	if (fabs(det) < EPSILON) return false;
+	retX = a + (b - a) * (cross((c - a), (d - c)) / det);
 	return true;
 }
 

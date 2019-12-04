@@ -1,4 +1,5 @@
 #pragma once
+#include "stb_image.h"
 #include "inc/mGlHeader2.h"
 #include "../glm/gtx/string_cast.hpp"
 #include <map>
@@ -140,10 +141,10 @@ public:
 
 class IShaderUniform {
 public:
-	virtual void setName(unsigned shaderIdx, const string& name) = 0;
-	virtual void setValuePtr(void* ptr) = 0;
-	virtual void setValueUniquePtr(void* ptr) = 0;
-	virtual void setUniform(void* ptr = nullptr) = 0;
+	virtual void setName(unsigned shaderIdx, const char* name) = 0;
+	virtual void setData(void* ptr) = 0;
+	virtual void setReferencePtr(void* ptr) = 0;
+	virtual void applyUniform() = 0;
 	virtual void log() = 0;
 };
 
@@ -153,69 +154,60 @@ class ShaderUniform : public IShaderUniform {
 public:
 	int uniformLocation = -2;
 	string uniformName;
-	T* valuePtr; // 보낼 값이 있는 포인터
+	T valuePtr; // 보낼 값이 있는 포인터
 	bool bIsUniquePtr; // valuePtr이 나만 가지고있는지?
 
-	// 이름설정
-	void setName(unsigned shaderIdx, const string& name) {
+	void setName(unsigned shaderIdx, const char* name) {
 		uniformName = name;
-		uniformLocation = glGetUniformLocation(shaderIdx, name.c_str());
+		uniformLocation = glGetUniformLocation(shaderIdx, name);
+	}
+	
+	// 값 설정
+	void setData(void* ptr) {
+		setData((T*)ptr);
 	}
 
-	// 쉐이더에 넣을 값 포인터 설정
-	void setValuePtr(T* ptr) {
-		valuePtr = ptr;
-		bIsUniquePtr = false;
+	// 참조 포인터 설정: 값이변경되면 알아서 변경
+	void setReferencePtr(void* ptr) {
+		setReferencePtr((T*)ptr);
 	}
 
-	// 쉐이더에 넣을 값 포인터 설정
-	void setValueUniquePtr(T* ptr) {
-		valuePtr = ptr;
-		bIsUniquePtr = true;
-	}
-
-	// 쉐이더에 값 전송
-	// 값이 변경될때만 하면되나?
-	// TODO 쉐이더 use 에서 호출되니까 파라미터로 뭘 넘길수가 없어서 나중에 손봐야함
-	void setUniform(void* ptr = nullptr) {
+	// 쉐이더에 값 적용
+	void applyUniform() {
 		if (uniformLocation != -1) {
-			if (ptr)
-				setUniformWithType(ptr);
-			else
-				setUniformWithType(valuePtr);
+			applyUniformByType(valuePtr);
 		}
 	}
 
-	~ShaderUniform() {
-		if (bIsUniquePtr)
-			delete valuePtr;
-	}
-
-	void setUniformWithType(void* ptr);
-
-	void setValuePtr(void* ptr) {
-		setValuePtr((T*)ptr);
-	}
-
-	void setValueUniquePtr(void* ptr) {
-		setValueUniquePtr((T*)ptr);
-	}
-
 	void log() {
-		debug("[%d]%s: %s", uniformLocation, uniformName.c_str(), glm::to_string(*valuePtr).c_str());
+		debug("[id:%d]%s: %s", uniformLocation, uniformName.c_str(), glm::to_string(*valuePtr).c_str());
 	}
+private:
+	void setData(T* ptr) {
+		valuePtr = *ptr;
+	}
+	void setReferencePtr(T* ptr) {
+		valuePtr = ptr;
+	}
+	void applyUniformByType(void* ptr);
 };
 
 
 template<>
-void ShaderUniform<mat4>::setUniformWithType(void* ptr) {
+void ShaderUniform<mat4>::applyUniformByType(void* ptr) {
 	glUniformMatrix4fv(uniformLocation, 1, GL_FALSE, (const float*)ptr);
 }
 
 template<>
-void ShaderUniform<vec3>::setUniformWithType(void* ptr) {
+void ShaderUniform<vec3>::applyUniformByType(void* ptr) {
 	glUniform3fv(uniformLocation, 1, (GLfloat*)ptr);
 }
+
+template<>
+void ShaderUniform<int>::applyUniformByType(void* ptr) {
+	glUniform1i(uniformLocation, *(GLint*)ptr);
+}
+
 
 //template<>
 //void ShaderUniform<mat4>::log() {
@@ -227,8 +219,46 @@ void ShaderUniform<vec3>::setUniformWithType(void* ptr) {
 //	debug("[%d]%s: %s", uniformLocation, uniformName, glm::to_string(*valuePtr));
 //}
 
+class Texture {
+public:
+	int width, height, nrChannels;
+	unsigned int id;
+	void load(const char* path) {
+		glGenTextures(1, &id);
+		glBindTexture(GL_TEXTURE_2D, id);
+		// set the texture wrapping parameters
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);	// set texture wrapping to GL_REPEAT (default wrapping method)
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+		// set texture filtering parameters
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		// load image, create texture and generate mipmaps
+		stbi_set_flip_vertically_on_load(true); // tell stb_image.h to flip loaded texture's on the y-axis.
+		// The FileSystem::getPath(...) is part of the GitHub repository so we can find files on any IDE/platform; replace it with your own image path.
+		unsigned char* data = stbi_load(path, &width, &height, &nrChannels, 0);
+		if (data) {
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+			glGenerateMipmap(GL_TEXTURE_2D);
+		} else {
+			assert("Failed to load texture: " && path && 0);
+		}
+		stbi_image_free(data);
+	}
+
+	//void setUniformToShader(Shader& shader, const char* name) {
+	//	glUniform1i(glGetUniformLocation(shader.id, name), 0);
+	//	// or set it via the texture class
+	//	shader.addUniform(name, 1);
+	//}
+};
 
 class Shader {
+	struct textureBindInfo {
+		unsigned int id;
+		unsigned int bindIdx;
+	};
+
+	unsigned char textureIdx = GL_TEXTURE0;
 public:
 	unsigned int id;
 	map<string, IShaderUniform*> shaderUniforms;
@@ -246,58 +276,57 @@ public:
 		shaders.insert(pair<string, Shader*>(shaderPath, this));
 	}
 
-	void addUniform(const string& name, int ptr) {
+	void addUniform(const char* name, int ptr) {
 		auto uniform = new ShaderUniform<int>();
 		print("%s int add uniform", name);
-		insertShaderUniformWithUniqueValue(uniform, name, ptr);
+		insertUniform(uniform, name, &ptr);
 	}
 
-	void addUniform(const string& name, mat4* ptr) {
+	void addUniform(const char* name, mat4* ptr) {
+		auto uniform = new ShaderUniform<mat4*>();
+		print("%s mat4 add Referentce uniform", name);
+		insertReferentceUniform(uniform, name, ptr);
+	}
+
+	void addUniform(const char* name, vec3* ptr) {
+		auto uniform = new ShaderUniform<vec3*>();
+		print("%s vec3 add Referentce uniform", name);
+		insertReferentceUniform(uniform, name, ptr);
+	}
+
+	void addUniform(const char* name, mat4& ptr) {
 		auto uniform = new ShaderUniform<mat4>();
-		print("%s mat4 add uniform", name)
-		insertShaderUniform(uniform, name, ptr);
+		print("%s mat4 add uniform", name);
+		insertUniform(uniform, name, &ptr);
 	}
 
-	void addUniform(const string& name, vec3* ptr) {
-		auto uniform = new ShaderUniform<vec3>();
-		print("%s vec3 add uniform", name)
-		insertShaderUniform(uniform, name, ptr);
+	void addUniform(const char* name, Texture& tex) {
+		auto uniform = new ShaderUniform<textureBindInfo>();
+		print("%s Texture add uniform", name);
+		auto a = textureBindInfo{ tex.id, textureIdx };
+		insertUniform(uniform, name, &a);
+		++textureIdx;
 	}
 
-	void addUniform(const string& name, const mat4& ptr) {
-		auto uniform = new ShaderUniform<mat4>();
-		print("%s mat4 add unique uniform", name);
-		if (uniform->valuePtr) {
-			*(mat4*)uniform->valuePtr = ptr;
-			insertShaderUniformWithUniqueValue(uniform, name, uniform->valuePtr);
-		} else
-			insertShaderUniformWithUniqueValue(uniform, name, new mat4(ptr));
-	}
-
-	// TODO 예외처리해서 실수 막을건지 아님 너그럽게 봐줄건지
-	IShaderUniform* getUniform(const char* name) {
-		auto findKey = shaderUniforms.find(name);
-		if (findKey == shaderUniforms.end()) {
-			assert(findKey != shaderUniforms.end());
-			return nullptr;
-		}
-		return findKey->second;
+	void removeUniform() {
+		//TODO 나중에만들거
 	}
 
 	void changeUniformValue(const char* name, void* ptr) {
 		auto uniform = getUniform(name);
 		if (uniform)
-			uniform->setValuePtr(ptr);
+			uniform->setData(ptr);
 	}
 
 	void use() {
 		glUseProgram(id);
 		if (!shaderUniforms.empty())
 			for (auto it = shaderUniforms.begin(); it != shaderUniforms.end(); it++) {
-				it->second->setUniform();
+				it->second->applyUniform();
 			}
 	}
 
+	// log용
 	void logAllUniforms() {
 		if (!shaderUniforms.empty())
 			for (auto it = shaderUniforms.begin(); it != shaderUniforms.end(); it++) {
@@ -307,23 +336,33 @@ public:
 			debug("%s has no uniforms", shaderPath);
 	}
 
-	void logUniform(string name) {
-		if (!shaderUniforms.empty())
-			getUniform(name.c_str())->log();
-		else
-			debug("%s has no uniforms", shaderPath);
+	void logUniform(const char* name) {
+		if (!shaderUniforms.empty()) {
+			auto temp = getUniform(name);
+			if (temp) { temp->log(); return; }
+		}
+		debug("%s has no uniforms", shaderPath);
+	}
+
+	// 이름으로 유니폼가져옴 없을시 null반환
+	IShaderUniform* getUniform(const char* name) {
+		auto findKey = shaderUniforms.find(name);
+		if (findKey == shaderUniforms.end()) {
+			return nullptr;
+		}
+		return findKey->second;
 	}
 
 private:
-	void insertShaderUniform(IShaderUniform* uniform, const string& name, void* ptr) {
+	void insertUniform(IShaderUniform* uniform, const char* name, void* ptr) {
 		uniform->setName(id, name);
-		uniform->setValuePtr(ptr);
+		uniform->setData(ptr);
 		shaderUniforms.insert(make_pair(name, uniform));
 	}
 
-	void insertShaderUniformWithUniqueValue(IShaderUniform* uniform, const string& name, void* ptr) {
+	void insertReferentceUniform(IShaderUniform* uniform, const char* name, void* ptr) {
 		uniform->setName(id, name);
-		uniform->setValueUniquePtr(ptr);
+		uniform->setReferencePtr(ptr);
 		shaderUniforms.insert(make_pair(name, uniform));
 	}
 };
@@ -547,6 +586,9 @@ void CameraShaderUniformBuffer::setData(Camera& cam, Window& win) {
 	this->vp = &cam.getTrans(win);
 	this->pos = &cam.getPos();
 }
+
+
+
 
 enum EMouse {
 	NONE,

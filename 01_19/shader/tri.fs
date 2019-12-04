@@ -20,9 +20,9 @@ uniform vec3 vcolor;
 
 void main(){
 	vec3 lightDir = normalize(lightPos - fragPos);
-	vec3 diffuse = max(dot(normal, lightDir), 0);
-	color = vec4(normal, 1.0);
-	return;
+	vec3 diffuse = vec3(max(dot(normal, lightDir), 0));
+	//color = vec4(normal, 1.0);
+	//return;
 	vec3 result = (diffuse+ambient) * vcolor;
 	color = vec4(result, 1.0);
 }

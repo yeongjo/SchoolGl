@@ -1,46 +1,9 @@
 ﻿#include "ToolModule.h"
 #include "bullet.h"
 #include "../GL/GLDebugDrawer.h"
-#include "stb_image.h"
 
 GLDebugDrawer	gDebugDrawer;
 
-float stageSizeX = 40;
-float stageSizeZ = 40;
-
-
-class Texture {
-public:
-	int width, height, nrChannels;
-	unsigned int id;
-	void load(const char* path) {
-		glGenTextures(1, &id);
-		glBindTexture(GL_TEXTURE_2D, id);
-		// set the texture wrapping parameters
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);	// set texture wrapping to GL_REPEAT (default wrapping method)
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-		// set texture filtering parameters
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-		// load image, create texture and generate mipmaps
-		stbi_set_flip_vertically_on_load(true); // tell stb_image.h to flip loaded texture's on the y-axis.
-		// The FileSystem::getPath(...) is part of the GitHub repository so we can find files on any IDE/platform; replace it with your own image path.
-		unsigned char* data = stbi_load(path, &width, &height, &nrChannels, 0);
-		if (data) {
-			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
-			glGenerateMipmap(GL_TEXTURE_2D);
-		} else {
-			assert("Failed to load texture: " && path && 0);
-		}
-		stbi_image_free(data);
-	}
-
-	void setUniformToShader(Shader& shader, const char* name) {
-		glUniform1i(glGetUniformLocation(shader.id, name), 0);
-		// or set it via the texture class
-		shader.addUniform(name, 1);
-	}
-};
 
 
 class PhysicsObj : public Obj {
@@ -153,6 +116,8 @@ Light* light;
 
 Shader triShader, gridShader, stageShader;
 
+Texture texture0;
+
 bool cameraFirstView = false;
 
 
@@ -209,6 +174,9 @@ void init() {
 	cam->armVector.z = -50;
 
 	light = new Light();
+
+	texture0.load("../textures/a.jpg");
+	triShader.addUniform("texture0", texture0);
 
 	vec3 sidesPos[] = { vec3(1, 0, 0), vec3(-1, 0, 0), vec3(0, 0, 1), vec3(0, 0, -1) };
 	vec3 sidesRot[] = { vec3(0, 0, 0), vec3(0, 180, 0), vec3(0, 270, 0), vec3(0, 90, 0) };
