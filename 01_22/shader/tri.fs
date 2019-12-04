@@ -19,11 +19,11 @@ uniform vec3 lightColor;
 
 uniform vec3 vcolor;
 
-uniform sampler2d texture0;
+uniform sampler2D texture0;
 
 void main(){
-	//color = vec4(normal, 1.0);
-	//return;
+	color = texture(texture0, uv);
+	return;
 	vec3 lightDir = normalize(lightPos - fragPos);
 	vec3 diffuse = max(dot(normal, lightDir), 0) * lightColor;
 

@@ -103,12 +103,30 @@ public:
 	}
 };
 
+class TextureObj : public Obj {
+public:
+	Texture texture;
+
+	virtual void render() {
+		if (shader) {
+			shader->changeUniformValue("trans", &getTrans());
+			TextureBindInfo tex{texture.id, 0};
+			shader->changeUniformValue("texture0", &texture);
+			shader->use();
+			applyColor(shader->id);
+		} else {
+			assert(0 && name.c_str()); // shader 없음
+		}
+		vo->render();
+	}
+};
+
 Window win;
 Camera* cam;
 
 VO gridVO;
 
-Obj objs[11];
+TextureObj objs[11];
 
 vector<PhysicsObj*> obstacle;
 
@@ -171,11 +189,16 @@ void init() {
 	gridShader.complieShader("grid");
 
 	cam = new Camera();
-	cam->armVector.z = -50;
+	cam->armVector.z = -20;
 
 	light = new Light();
 
-	texture0.load("../textures/a.jpg");
+	Texture tex1;
+	Texture tex2;
+	Texture tex3;
+	tex1.load("../textures/a.jpg");
+	tex2.load("../textures/b.jpg");
+	tex3.load("../textures/c.jpg");
 	triShader.addUniform("texture0", texture0);
 
 	vec3 sidesPos[] = { vec3(1, 0, 0), vec3(-1, 0, 0), vec3(0, 0, 1), vec3(0, 0, -1) };
@@ -185,11 +208,13 @@ void init() {
 		objs[i].loadObj("../model/opengl_0115/cube_front.obj");
 		objs[i].getPos() = sidesPos[i];
 		objs[i].getRotation() = sidesRot[i];
+		objs[i].texture = tex1;
 		objs[i].setParent(&objs[4]);
 	}
 	for (size_t i = 4; i < 7; i++) {
 		objs[i].loadObj("../model/opengl_0115/cube_top.obj");
 		objs[i].getPos() = floorsPos[i - 4];
+		objs[i].texture = tex2;
 	}
 	objs[5].setParent(&objs[4]);
 	for (size_t i = 7; i < 11; i++) {
@@ -197,6 +222,7 @@ void init() {
 		objs[i].getPos() = sidesPos[i - 7];
 		objs[i].getRotation() = sidesRot[i - 7];
 		objs[i].setParent(&objs[6]);
+		objs[i].texture = tex3;
 	}
 
 	for (size_t i = 0; i < 11; i++) {
@@ -261,6 +287,7 @@ GLvoid drawScene()
 
 	gridShader.use();
 	gridVO.render();
+
 	Debug::render();
 	Bullet::dynamicsWorld->debugDrawWorld();
 

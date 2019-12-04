@@ -1,4 +1,5 @@
 #pragma once
+#define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 #include "inc/mGlHeader2.h"
 #include "../glm/gtx/string_cast.hpp"
@@ -137,13 +138,15 @@ public:
 	}
 };
 
-
+struct TextureBindInfo {
+	unsigned int id;
+	unsigned int activeIdx;
+};
 
 class IShaderUniform {
 public:
 	virtual void setName(unsigned shaderIdx, const char* name) = 0;
 	virtual void setData(void* ptr) = 0;
-	virtual void setReferencePtr(void* ptr) = 0;
 	virtual void applyUniform() = 0;
 	virtual void log() = 0;
 };
@@ -154,8 +157,16 @@ class ShaderUniform : public IShaderUniform {
 public:
 	int uniformLocation = -2;
 	string uniformName;
-	T valuePtr; // 보낼 값이 있는 포인터
-	bool bIsUniquePtr; // valuePtr이 나만 가지고있는지?
+	T* valuePtr = nullptr; // 보낼 값이 있는 포인터
+	bool isRef; // 다른걸 참조하는지: 한다면 지우면안되고 아니면 지워야함
+
+	ShaderUniform(bool isRef) {
+		this->isRef = isRef;
+	}
+
+	virtual ~ShaderUniform() {
+		if (!isRef) delete valuePtr;
+	}
 
 	void setName(unsigned shaderIdx, const char* name) {
 		uniformName = name;
@@ -164,48 +175,59 @@ public:
 	
 	// 값 설정
 	void setData(void* ptr) {
-		setData((T*)ptr);
-	}
-
-	// 참조 포인터 설정: 값이변경되면 알아서 변경
-	void setReferencePtr(void* ptr) {
-		setReferencePtr((T*)ptr);
+		T* t = (T*)ptr;
+		if (!isRef&&!valuePtr)
+			t = new T(*t);
+		setData(t);
 	}
 
 	// 쉐이더에 값 적용
 	void applyUniform() {
 		if (uniformLocation != -1) {
-			applyUniformByType(valuePtr);
+			applyUniformByType();
 		}
 	}
 
 	void log() {
-		debug("[id:%d]%s: %s", uniformLocation, uniformName.c_str(), glm::to_string(*valuePtr).c_str());
+		//debug("[id:%d]%s: %s", uniformLocation, uniformName.c_str(), glm::to_string(*valuePtr).c_str());
 	}
 private:
 	void setData(T* ptr) {
-		valuePtr = *ptr;
-	}
-	void setReferencePtr(T* ptr) {
 		valuePtr = ptr;
 	}
-	void applyUniformByType(void* ptr);
+
+	void applyUniformByType();
 };
 
-
 template<>
-void ShaderUniform<mat4>::applyUniformByType(void* ptr) {
-	glUniformMatrix4fv(uniformLocation, 1, GL_FALSE, (const float*)ptr);
+void ShaderUniform<TextureBindInfo>::setData(void* ptr) {
+	TextureBindInfo* t = (TextureBindInfo*)ptr;
+	if (!isRef && !valuePtr)
+		t = new TextureBindInfo(*t);
+	setData(t);
+	glUniform1i(uniformLocation, t->activeIdx);
 }
 
 template<>
-void ShaderUniform<vec3>::applyUniformByType(void* ptr) {
-	glUniform3fv(uniformLocation, 1, (GLfloat*)ptr);
+void ShaderUniform<mat4>::applyUniformByType() {
+	glUniformMatrix4fv(uniformLocation, 1, GL_FALSE, (const float*)valuePtr);
 }
 
 template<>
-void ShaderUniform<int>::applyUniformByType(void* ptr) {
-	glUniform1i(uniformLocation, *(GLint*)ptr);
+void ShaderUniform<vec3>::applyUniformByType() {
+	glUniform3fv(uniformLocation, 1, (GLfloat*)valuePtr);
+}
+
+template<>
+void ShaderUniform<int>::applyUniformByType() {
+	glUniform1i(uniformLocation, *(GLint*)valuePtr);
+}
+
+template<>
+void ShaderUniform<TextureBindInfo>::applyUniformByType() {
+	
+	glActiveTexture(valuePtr->activeIdx);
+	glBindTexture(GL_TEXTURE_2D, valuePtr->id);
 }
 
 
@@ -253,12 +275,9 @@ public:
 };
 
 class Shader {
-	struct textureBindInfo {
-		unsigned int id;
-		unsigned int bindIdx;
-	};
+	
 
-	unsigned char textureIdx = GL_TEXTURE0;
+	unsigned int textureIdx = GL_TEXTURE0;
 public:
 	unsigned int id;
 	map<string, IShaderUniform*> shaderUniforms;
@@ -277,34 +296,29 @@ public:
 	}
 
 	void addUniform(const char* name, int ptr) {
-		auto uniform = new ShaderUniform<int>();
 		print("%s int add uniform", name);
-		insertUniform(uniform, name, &ptr);
+		insertUniform(name, &ptr, false);
 	}
 
 	void addUniform(const char* name, mat4* ptr) {
-		auto uniform = new ShaderUniform<mat4*>();
 		print("%s mat4 add Referentce uniform", name);
-		insertReferentceUniform(uniform, name, ptr);
+		insertUniform(name, ptr);
 	}
 
 	void addUniform(const char* name, vec3* ptr) {
-		auto uniform = new ShaderUniform<vec3*>();
 		print("%s vec3 add Referentce uniform", name);
-		insertReferentceUniform(uniform, name, ptr);
+		insertUniform(name, ptr);
 	}
 
 	void addUniform(const char* name, mat4& ptr) {
-		auto uniform = new ShaderUniform<mat4>();
 		print("%s mat4 add uniform", name);
-		insertUniform(uniform, name, &ptr);
+		insertUniform(name, &ptr, false);
 	}
 
 	void addUniform(const char* name, Texture& tex) {
-		auto uniform = new ShaderUniform<textureBindInfo>();
 		print("%s Texture add uniform", name);
-		auto a = textureBindInfo{ tex.id, textureIdx };
-		insertUniform(uniform, name, &a);
+		auto a = TextureBindInfo{ tex.id, textureIdx };
+		insertUniform(name, &a, false);
 		++textureIdx;
 	}
 
@@ -354,15 +368,16 @@ public:
 	}
 
 private:
-	void insertUniform(IShaderUniform* uniform, const char* name, void* ptr) {
-		uniform->setName(id, name);
-		uniform->setData(ptr);
-		shaderUniforms.insert(make_pair(name, uniform));
-	}
-
-	void insertReferentceUniform(IShaderUniform* uniform, const char* name, void* ptr) {
-		uniform->setName(id, name);
-		uniform->setReferencePtr(ptr);
+	template<class T>
+	void insertUniform(const char* name, T* ptr, bool isRef = true) {
+		auto uniform = getUniform(name);
+		if (uniform) {
+			assert("넣으려는 유니폼이 이미 있음" && name && 0);
+		}else {
+			uniform = new ShaderUniform<T>(isRef);
+			uniform->setName(id, name);
+			uniform->setData(ptr);
+		}
 		shaderUniforms.insert(make_pair(name, uniform));
 	}
 };

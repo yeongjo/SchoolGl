@@ -306,4 +306,5 @@ bool segmentIntersection(vec2& a, vec2& b, vec2& c, vec2& d, vec2& retP) {
 	if (lineIntersection(a, b, c, d, retP))
 		//p가 두 선분에 포함되어 있는 경우에만 참을 반환한다.
 		return inBoundingRectangle(retP, a, b) && inBoundingRectangle(retP, c, d);
+	return false;
 }
