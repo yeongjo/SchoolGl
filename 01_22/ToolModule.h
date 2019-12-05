@@ -147,6 +147,7 @@ class IShaderUniform {
 public:
 	virtual void setName(unsigned shaderIdx, const char* name) = 0;
 	virtual void setData(void* ptr) = 0;
+	virtual void* getData() = 0;
 	virtual void applyUniform() = 0;
 	virtual void log() = 0;
 };
@@ -181,6 +182,10 @@ public:
 		setData(t);
 	}
 
+	void* getData() {
+		return valuePtr;
+	}
+
 	// 쉐이더에 값 적용
 	void applyUniform() {
 		if (uniformLocation != -1) {
@@ -202,9 +207,13 @@ private:
 template<>
 void ShaderUniform<TextureBindInfo>::setData(void* ptr) {
 	TextureBindInfo* t = (TextureBindInfo*)ptr;
+
 	if (!isRef && !valuePtr)
-		t = new TextureBindInfo(*t);
-	setData(t);
+		valuePtr = new TextureBindInfo(*t);
+	valuePtr->id = t->id;
+	valuePtr->activeIdx = t->activeIdx;
+
+	//setData(t);
 	glUniform1i(uniformLocation, t->activeIdx);
 }
 
@@ -326,7 +335,8 @@ public:
 		//TODO 나중에만들거
 	}
 
-	void changeUniformValue(const char* name, void* ptr) {
+	template<class T>
+	void changeUniformValue(const char* name, T* ptr) {
 		auto uniform = getUniform(name);
 		if (uniform)
 			uniform->setData(ptr);
@@ -382,6 +392,15 @@ private:
 	}
 };
 map<string, Shader*> Shader::shaders;
+
+template<>
+void Shader::changeUniformValue<Texture>(const char* name, Texture* ptr) {
+	auto uniform = getUniform(name);
+	if (uniform) {
+		auto a = TextureBindInfo{ ptr->id, ((TextureBindInfo*)uniform->getData())->activeIdx};
+		uniform->setData(&a);
+	}
+}
 
 
 class Obj : public TickObj {
